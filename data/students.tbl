@@ -1,0 +1,8 @@
+#schema:
+id INT PRIMARY_KEY
+name STRING
+age INT
+#data:
+1,Shivam,21
+2,Rahul,22
+3,Aman,20

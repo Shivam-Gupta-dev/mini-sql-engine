@@ -1,0 +1,9 @@
+#schema:
+mark_id INT PRIMARY_KEY
+student_id INT FOREIGN_KEY REFERENCES students(id)
+subject STRING
+score INT
+#data:
+1,1,Math,90
+2,1,Physics,85
+3,2,Math,70
