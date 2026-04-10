@@ -1,0 +1,10 @@
+# Join Output
+# Type: INNER JOIN
+# Condition: marks.student_id = students.id
+# Generated: Wed Mar  4 17:38:57 2026
+# Rows: 3
+
+marks.mark_id,marks.student_id,marks.subject,marks.score,students.id,students.name,students.age
+1,1,Math,90,1,Shivam,21
+2,1,Physics,85,1,Shivam,21
+3,2,Math,70,2,Rahul,22

@@ -32,6 +32,124 @@
 #include <iostream>
 #include <iomanip>
 #include <algorithm>
+#include <fstream>
+#include <ctime>
+
+// ============================================================
+//  saveJoinOutput — Write join results to a file in data/
+// ============================================================
+// Creates a human-readable output file containing:
+//   - Join type and condition
+//   - Column headers in table.column format
+//   - All result rows (comma-separated)
+//   - Row count summary
+void Engine::saveJoinOutput(const string& fileName, const Table& tA, const Table& tB,
+                            const string& colA, const string& colB,
+                            const string& joinType,
+                            const vector<vector<string>>& resultRows) {
+    string filePath = "data/" + fileName;
+    ofstream outFile(filePath);
+    if (!outFile.is_open()) {
+        cerr << "[Error] Output file '" << filePath << "' create nahi ho saka!" << endl;
+        return;
+    }
+
+    // Write column header (table.column format) as first CSV row
+    for (size_t i = 0; i < tA.schema.size(); i++) {
+        if (i > 0) outFile << ",";
+        outFile << tA.name << "." << tA.schema[i].name;
+    }
+    for (size_t i = 0; i < tB.schema.size(); i++) {
+        outFile << "," << tB.name << "." << tB.schema[i].name;
+    }
+    outFile << endl;
+
+    // Write data rows (comma-separated)
+    for (const auto& row : resultRows) {
+        for (size_t i = 0; i < row.size(); i++) {
+            if (i > 0) outFile << ",";
+            outFile << row[i];
+        }
+        outFile << endl;
+    }
+
+    outFile.close();
+    cout << "  [Output] CSV saved to : " << filePath << endl;
+}
+
+// ============================================================
+//  saveTextOutput — Write join results to a TXT file in data/
+// ============================================================
+// Creates a human-readable text file containing:
+//   - Join type, condition, timestamp, row count as comment headers
+//   - Column headers in table.column format
+//   - All result rows in formatted tabular layout
+void Engine::saveTextOutput(const string& fileName, const Table& tA, const Table& tB,
+                            const string& colA, const string& colB,
+                            const string& joinType,
+                            const vector<vector<string>>& resultRows) {
+    string filePath = "data/" + fileName;
+    ofstream outFile(filePath);
+    if (!outFile.is_open()) {
+        cerr << "[Error] Output file '" << filePath << "' create nahi ho saka!" << endl;
+        return;
+    }
+
+    // Write metadata header as comments
+    time_t now = time(nullptr);
+    outFile << "# Join Output" << endl;
+    outFile << "# Type: " << joinType << endl;
+    outFile << "# Condition: " << tA.name << "." << colA
+            << " = " << tB.name << "." << colB << endl;
+    outFile << "# Generated: " << ctime(&now);
+    outFile << "# Rows: " << resultRows.size() << endl;
+    outFile << endl;
+
+    // Build column headers
+    vector<string> headers;
+    for (const auto& col : tA.schema)
+        headers.push_back(tA.name + "." + col.name);
+    for (const auto& col : tB.schema)
+        headers.push_back(tB.name + "." + col.name);
+
+    // Calculate column widths
+    vector<int> widths(headers.size());
+    for (size_t i = 0; i < headers.size(); i++)
+        widths[i] = (int)headers[i].size();
+    for (const auto& row : resultRows) {
+        for (size_t i = 0; i < row.size() && i < widths.size(); i++) {
+            if ((int)row[i].size() > widths[i])
+                widths[i] = (int)row[i].size();
+        }
+    }
+
+    // Build separator
+    string sep = "+";
+    for (size_t i = 0; i < widths.size(); i++)
+        sep += string(widths[i] + 2, '-') + "+";
+    outFile << sep << endl;
+
+    // Print header row
+    outFile << "|";
+    for (size_t i = 0; i < headers.size(); i++)
+        outFile << " " << left << setw(widths[i]) << headers[i] << " |";
+    outFile << endl;
+    outFile << sep << endl;
+
+    // Print data rows
+    for (const auto& row : resultRows) {
+        outFile << "|";
+        for (size_t i = 0; i < headers.size(); i++) {
+            string val = (i < row.size()) ? row[i] : "";
+            outFile << " " << left << setw(widths[i]) << val << " |";
+        }
+        outFile << endl;
+    }
+    outFile << sep << endl;
+
+    outFile.close();
+    cout << "  [Output] TXT saved to : " << filePath << endl;
+}
 
 // ============================================================
 //  loadTable — Load a table from file (with caching)
@@ -261,13 +379,19 @@ void Engine::innerJoin(const string& tableA, const string& tableB,
     int totalCols = (int)(tA.schema.size() + tB.schema.size());
     int totalWidth = totalCols * (colWidth + 3) + 1;
 
-    // Nested loop join
+    // Nested loop join — collect results for both display and file output
+    vector<vector<string>> resultRows;
     int matchCount = 0;
     for (const auto& rowA : tA.rows) {
         for (const auto& rowB : tB.rows) {
             // Join condition: compare values at specified columns
             if (rowA[idxA] == rowB[idxB]) {
                 printJoinRow(tA, rowA, tB, rowB);
+                // Build merged row for file output
+                vector<string> merged;
+                merged.insert(merged.end(), rowA.begin(), rowA.end());
+                merged.insert(merged.end(), rowB.begin(), rowB.end());
+                resultRows.push_back(merged);
                 matchCount++;
             }
         }
@@ -279,6 +403,12 @@ void Engine::innerJoin(const string& tableA, const string& tableB,
     if (matchCount == 0) {
         cout << "  Koi matching row nahi mila! (No matching rows found)" << endl;
     }
+
+    // Save results to output files (CSV + TXT)
+    string csvName = "output_inner_join_" + tableA + "_" + tableB + ".csv";
+    string txtName = "output_inner_join_" + tableA + "_" + tableB + ".txt";
+    saveJoinOutput(csvName, tA, tB, colA, colB, "INNER JOIN", resultRows);
+    saveTextOutput(txtName, tA, tB, colA, colB, "INNER JOIN", resultRows);
     cout << endl;
 }
 
@@ -335,7 +465,8 @@ void Engine::leftJoin(const string& tableA, const string& tableB,
     int totalCols = (int)(tA.schema.size() + tB.schema.size());
     int totalWidth = totalCols * (colWidth + 3) + 1;
 
-    // Nested loop left join
+    // Nested loop left join — collect results for both display and file output
+    vector<vector<string>> resultRows;
     int totalRows = 0;
     for (const auto& rowA : tA.rows) {
         bool matched = false;
@@ -343,6 +474,11 @@ void Engine::leftJoin(const string& tableA, const string& tableB,
         for (const auto& rowB : tB.rows) {
             if (rowA[idxA] == rowB[idxB]) {
                 printJoinRow(tA, rowA, tB, rowB);
+                // Build merged row for file output
+                vector<string> merged;
+                merged.insert(merged.end(), rowA.begin(), rowA.end());
+                merged.insert(merged.end(), rowB.begin(), rowB.end());
+                resultRows.push_back(merged);
                 matched = true;
                 totalRows++;
             }
@@ -351,11 +487,24 @@ void Engine::leftJoin(const string& tableA, const string& tableB,
         // If no match found for this left row, pad B side with NULLs
         if (!matched) {
             printLeftNullRow(tA, rowA, tB);
+            // Build NULL-padded row for file output
+            vector<string> merged;
+            merged.insert(merged.end(), rowA.begin(), rowA.end());
+            for (size_t i = 0; i < tB.schema.size(); i++) {
+                merged.push_back("NULL");
+            }
+            resultRows.push_back(merged);
             totalRows++;
         }
     }
 
     printSeparator(totalWidth);
     cout << "\n  Total result rows: " << totalRows << endl;
+
+    // Save results to output files (CSV + TXT)
+    string csvName = "output_left_join_" + tableA + "_" + tableB + ".csv";
+    string txtName = "output_left_join_" + tableA + "_" + tableB + ".txt";
+    saveJoinOutput(csvName, tA, tB, colA, colB, "LEFT JOIN", resultRows);
+    saveTextOutput(txtName, tA, tB, colA, colB, "LEFT JOIN", resultRows);
     cout << endl;
 }
