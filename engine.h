@@ -46,7 +46,7 @@ public:
     // LEFT JOIN: For each row in A,
     //   if match found in B → print merged row
     //   else → print A row + NULL for all B columns
-    void leftJoin(const string &tableA, const string &tabl+eB,
+    void leftJoin(const string &tableA, const string &tableB,
                   const string &colA, const string &colB);
 
 private:

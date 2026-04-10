@@ -1,7 +1,7 @@
 # Join Output
 # Type: INNER JOIN
 # Condition: students.id = marks.student_id
-# Generated: Wed Mar  4 18:05:22 2026
+# Generated: Fri Apr 10 17:46:34 2026
 # Rows: 3
 
 +-------------+---------------+--------------+---------------+------------------+---------------+-------------+

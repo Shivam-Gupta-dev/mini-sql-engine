@@ -67,15 +67,22 @@ void showHelp() {
 // ============================================================
 //  MAIN FUNCTION — REPL Loop
 // ============================================================
-int main() {
-    // Show welcome banner
-    showBanner();
-
+int main(int argc, char* argv[]) {
     // Create engine and parser instances
     Engine engine;
     Parser parser;
 
-    // Show available commands
+    // Check if a command is provided as an argument (for programmatic use)
+    if (argc > 1) {
+        // Single command mode (for Streamlit/external calls)
+        string input = argv[1];
+        ParsedCommand cmd = parser.parse(input);
+        engine.execute(cmd);
+        return 0;
+    }
+
+    // Show welcome banner only in interactive mode
+    showBanner();
     showHelp();
 
     // ---- REPL Loop (Read-Eval-Print Loop) ----
