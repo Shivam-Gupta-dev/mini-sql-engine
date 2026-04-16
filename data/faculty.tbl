@@ -1,0 +1,17 @@
+#schema:
+faculty_id INT PRIMARY_KEY
+faculty_name STRING
+qualification STRING
+dept_id INT FOREIGN_KEY REFERENCES departments(dept_id)
+experience INT
+#data:
+1,Dr. Patel,PhD,1,15
+2,Prof. Singh,M.Tech,1,10
+3,Dr. Sharma,PhD,2,12
+4,Prof. Gupta,M.Tech,3,8
+5,Dr. Verma,PhD,4,20
+6,Prof. Nair,M.Tech,5,7
+7,Dr. Iyer,PhD,6,18
+8,Prof. Kulkarni,M.Tech,7,9
+9,Dr. Deshmukh,PhD,8,14
+10,Prof. Menon,M.Tech,10,11

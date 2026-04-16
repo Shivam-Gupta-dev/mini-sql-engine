@@ -1,0 +1,15 @@
+#schema:
+dept_id INT PRIMARY_KEY
+dept_name STRING
+location STRING
+#data:
+1,Computer Science,Building A
+2,Electronics,Building B
+3,Mechanical,Building C
+4,Civil,Building D
+5,Electrical,Building E
+6,Chemical,Building F
+7,Aerospace,Building G
+8,Biotechnology,Building H
+9,Information Technology,Building I
+10,Data Science,Building J

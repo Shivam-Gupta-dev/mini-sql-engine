@@ -1,0 +1,16 @@
+#schema:
+course_id INT PRIMARY_KEY
+course_name STRING
+credits INT
+dept_id INT FOREIGN_KEY REFERENCES departments(dept_id)
+#data:
+1,Database Systems,4,1
+2,Web Development,3,1
+3,Machine Learning,4,10
+4,Digital Logic,4,2
+5,Circuit Design,3,2
+6,Thermodynamics,4,3
+7,Structural Analysis,3,4
+8,Power Systems,4,5
+9,Process Control,3,6
+10,Aerodynamics,4,7

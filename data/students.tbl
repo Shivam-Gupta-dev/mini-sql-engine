@@ -2,7 +2,16 @@
 id INT PRIMARY_KEY
 name STRING
 age INT
+department STRING
+email STRING
 #data:
-1,Shivam,21
-2,Rahul,22
-3,Aman,20
+1,Shivam,21,Computer Science,shivam@uni.com
+2,Rahul,22,Electronics,rahul@uni.com
+3,Aman,20,Mechanical,aman@uni.com
+4,Priya,21,Computer Science,priya@uni.com
+5,Neha,20,Data Science,neha@uni.com
+6,Vikram,22,Electrical,vikram@uni.com
+7,Anjali,21,Civil,anjali@uni.com
+8,Arjun,20,Computer Science,arjun@uni.com
+9,Disha,22,Information Technology,disha@uni.com
+10,Rohit,21,Electronics,rohit@uni.com
