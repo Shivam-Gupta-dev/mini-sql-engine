@@ -21,7 +21,8 @@
  *    4. Look for "par" to locate the join condition
  *    5. Parse "table.column = table.column" between "ko" and "par"
  *    6. Detect join type: "inner join" or "left join"
- *    7. Validate that "karke dikha" is present
+ *    4. Detect aggregation: <table> me <column> ka <func> nikal kar dikha
+ *    5. Validate that "karke dikha" or "nikal kar dikha" is present
  */
 
 #include "parser.h"
@@ -66,15 +67,21 @@ vector<string> Parser::tokenize(const string& s) {
 //      → CMD_INNER_JOIN
 //   3. "<t1> aur <t2> ko <t1>.<c1> = <t2>.<c2> par left join karke dikha"
 //      → CMD_LEFT_JOIN
+//   4. "<table> me <column> ka <func> nikal kar dikha"
+//      → CMD_AGGREGATE
 //
 // The parser extracts:
 //   - leftTable, rightTable
 //   - leftColumn, rightColumn (from the join condition)
 //   - Join type (inner or left)
+//   - aggTable, aggColumn, aggFunc (for aggregation)
 // ============================================================
 ParsedCommand Parser::parse(const string& input) {
     ParsedCommand cmd;
     cmd.type = CMD_UNKNOWN;
+    cmd.aggTable = "";
+    cmd.aggColumn = "";
+    cmd.aggFunc = AGG_NONE;
 
     string trimmed = trim(input);
     if (trimmed.empty()) {
@@ -93,7 +100,7 @@ ParsedCommand Parser::parse(const string& input) {
     }
 
     // ============================================================
-    // COMMAND: JOIN — "<t1> aur <t2> ko <cond> par <type> join karke dikha"
+    // COMMAND: JOIN — "<t1> aur <t2> ko <cond> par <type> join karke [agg] dikha"
     // ============================================================
     // Step 1: Must contain "aur", "ko", "par", "join", "karke", "dikha"
     if (lower.find("aur") == string::npos ||
@@ -227,9 +234,40 @@ ParsedCommand Parser::parse(const string& input) {
         }
     }
 
-    // Step 7: Validate "karke dikha" is present at the end
-    if (lower.find("karke dikha") == string::npos) {
-        cerr << "[Error] Command ke end mein 'karke dikha' likho!" << endl;
+    // Step 7: Determine aggregation (optional)
+    int kaPos = -1;
+    for (int i = joinPos; i < (int)tokens.size(); i++) {
+        if (tokens[i] == "ka") kaPos = i;
+    }
+    
+    if (kaPos > joinPos + 1 && kaPos + 1 < (int)tokens.size()) {
+        string aggColToken = tokens[kaPos - 1]; 
+        string funcToken = tokens[kaPos + 1];
+        
+        size_t dotPos = aggColToken.find('.');
+        if (dotPos != string::npos) {
+            cmd.aggTable = aggColToken.substr(0, dotPos);
+            cmd.aggColumn = aggColToken.substr(dotPos + 1);
+        } else {
+            cmd.aggTable = ""; // will guess from joined tables later
+            cmd.aggColumn = aggColToken;
+        }
+
+        if (funcToken == "sum") cmd.aggFunc = AGG_SUM;
+        else if (funcToken == "avg") cmd.aggFunc = AGG_AVG;
+        else if (funcToken == "count") cmd.aggFunc = AGG_COUNT;
+        else if (funcToken == "min") cmd.aggFunc = AGG_MIN;
+        else if (funcToken == "max") cmd.aggFunc = AGG_MAX;
+        else {
+             cerr << "[Error] Unknown aggregation function: '" << funcToken << "'. Use sum, avg, count, min, or max." << endl;
+             cmd.type = CMD_UNKNOWN;
+             return cmd;
+        }
+    }
+
+    // Step 8: Validate "dikha" is present at the end
+    if (lower.find("dikha") == string::npos) {
+        cerr << "[Error] Command ke end mein 'dikha' likho!" << endl;
         cmd.type = CMD_UNKNOWN;
         return cmd;
     }

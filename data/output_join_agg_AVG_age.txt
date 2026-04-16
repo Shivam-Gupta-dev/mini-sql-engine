@@ -1,0 +1,9 @@
+# Aggregation Output
+# Table: JOIN(students_marks)
+# Column: students.age
+# Function: AVG
+# Generated: Thu Apr 16 13:05:08 2026
+
++----------------------+----------------------+
+| AVG(students.age)    | 21                   |
++----------------------+----------------------+

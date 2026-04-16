@@ -14,8 +14,8 @@
  *  Architecture:
  *    User Input → Parser → ParsedCommand → Engine → Table I/O → Output
  *
- *  This engine is READ-ONLY. It performs only INNER JOIN and
- *  LEFT JOIN on pre-existing .tbl files in the data/ folder.
+ *  This engine is READ-ONLY. It performs only INNER JOIN,
+ *  LEFT JOIN, and AGGREGATION on pre-existing .tbl files in the data/ folder.
  *  No create/insert/update/delete operations are supported.
  */
 
@@ -53,13 +53,15 @@ void showHelp() {
     cout << "     Example: students aur marks ko students.id = marks.student_id par inner join karke dikha" << endl;
     cout << endl;
     cout << "  2. LEFT JOIN:" << endl;
-    cout << "     <t1> aur <t2> ko <t1>.<col1> = <t2>.<col2> par left join karke dikha" << endl;
-    cout << "     Example: students aur marks ko students.id = marks.student_id par left join karke dikha" << endl;
+    cout << "  3. AGGREGATION ON JOIN:" << endl;
+    cout << "     <t1> aur <t2> ko <t1>.<col1> = <t2>.<col2> par <inner|left> join karke <table>.<col> ka <func> nikal kar dikha" << endl;
+    cout << "     Functions: sum, avg, count, min, max" << endl;
+    cout << "     Example: students aur marks ko students.id = marks.student_id par inner join karke marks.score ka sum nikal kar dikha" << endl;
     cout << endl;
-    cout << "  3. EXIT:" << endl;
+    cout << "  4. EXIT:" << endl;
     cout << "     band karo" << endl;
     cout << endl;
-    cout << "  4. HELP:" << endl;
+    cout << "  5. HELP:" << endl;
     cout << "     madad" << endl;
     cout << endl;
 }

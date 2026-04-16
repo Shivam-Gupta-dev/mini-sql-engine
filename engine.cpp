@@ -152,6 +152,35 @@ void Engine::saveTextOutput(const string& fileName, const Table& tA, const Table
 }
 
 // ============================================================
+//  saveAggregateOutput — Write aggregation result to file
+// ============================================================
+void Engine::saveAggregateOutput(const string& fileName, const string& tableName,
+                                 const string& colName, const string& funcStr,
+                                 double result) {
+    string filePath = "data/" + fileName;
+    ofstream outFile(filePath);
+    if (!outFile.is_open()) {
+        cerr << "[Error] Output file '" << filePath << "' create nahi ho saka!" << endl;
+        return;
+    }
+
+    time_t now = time(nullptr);
+    outFile << "# Aggregation Output" << endl;
+    outFile << "# Table: " << tableName << endl;
+    outFile << "# Column: " << colName << endl;
+    outFile << "# Function: " << funcStr << endl;
+    outFile << "# Generated: " << ctime(&now);
+    outFile << endl;
+    
+    outFile << "+----------------------+----------------------+" << endl;
+    outFile << "| " << left << setw(20) << (funcStr + "(" + colName + ")") << " | " << left << setw(20) << result << " |" << endl;
+    outFile << "+----------------------+----------------------+" << endl;
+
+    outFile.close();
+    cout << "  [Output] TXT saved to : " << filePath << endl;
+}
+
+// ============================================================
 //  loadTable — Load a table from file (with caching)
 // ============================================================
 // If the table is already in the cache, return it directly.
@@ -309,12 +338,14 @@ void Engine::execute(const ParsedCommand& cmd) {
     switch (cmd.type) {
         case CMD_INNER_JOIN:
             innerJoin(cmd.leftTable, cmd.rightTable,
-                      cmd.leftColumn, cmd.rightColumn);
+                      cmd.leftColumn, cmd.rightColumn,
+                      cmd.aggTable, cmd.aggColumn, cmd.aggFunc);
             break;
 
         case CMD_LEFT_JOIN:
             leftJoin(cmd.leftTable, cmd.rightTable,
-                     cmd.leftColumn, cmd.rightColumn);
+                     cmd.leftColumn, cmd.rightColumn,
+                     cmd.aggTable, cmd.aggColumn, cmd.aggFunc);
             break;
 
         case CMD_EXIT:
@@ -326,6 +357,7 @@ void Engine::execute(const ParsedCommand& cmd) {
             cout << "\nSupported commands:" << endl;
             cout << "  INNER JOIN: <t1> aur <t2> ko <t1>.<col1> = <t2>.<col2> par inner join karke dikha" << endl;
             cout << "  LEFT JOIN : <t1> aur <t2> ko <t1>.<col1> = <t2>.<col2> par left join karke dikha" << endl;
+            cout << "  AGG. JOIN : ... join karke <table>.<column> ka <sum|avg|count|min|max> nikal kar dikha" << endl;
             cout << "  EXIT      : band karo" << endl;
             break;
     }
@@ -343,7 +375,9 @@ void Engine::execute(const ParsedCommand& cmd) {
 //  Time complexity: O(|A| * |B|)
 // ============================================================
 void Engine::innerJoin(const string& tableA, const string& tableB,
-                       const string& colA, const string& colB) {
+                       const string& colA, const string& colB,
+                       const string& aggTable, const string& aggCol, 
+                       AggregationFunction aggFunc) {
     // Load both tables
     Table tA, tB;
     if (!loadTable(tableA, tA)) {
@@ -409,6 +443,10 @@ void Engine::innerJoin(const string& tableA, const string& tableB,
     string txtName = "output_inner_join_" + tableA + "_" + tableB + ".txt";
     saveJoinOutput(csvName, tA, tB, colA, colB, "INNER JOIN", resultRows);
     saveTextOutput(txtName, tA, tB, colA, colB, "INNER JOIN", resultRows);
+
+    if (aggFunc != AGG_NONE) {
+        processJoinAggregation(resultRows, tA, tB, aggTable, aggCol, aggFunc);
+    }
     cout << endl;
 }
 
@@ -429,7 +467,9 @@ void Engine::innerJoin(const string& tableA, const string& tableB,
 //  Time complexity: O(|A| * |B|)
 // ============================================================
 void Engine::leftJoin(const string& tableA, const string& tableB,
-                      const string& colA, const string& colB) {
+                      const string& colA, const string& colB,
+                      const string& aggTable, const string& aggCol, 
+                      AggregationFunction aggFunc) {
     // Load both tables
     Table tA, tB;
     if (!loadTable(tableA, tA)) {
@@ -506,5 +546,101 @@ void Engine::leftJoin(const string& tableA, const string& tableB,
     string txtName = "output_left_join_" + tableA + "_" + tableB + ".txt";
     saveJoinOutput(csvName, tA, tB, colA, colB, "LEFT JOIN", resultRows);
     saveTextOutput(txtName, tA, tB, colA, colB, "LEFT JOIN", resultRows);
+
+    if (aggFunc != AGG_NONE) {
+        processJoinAggregation(resultRows, tA, tB, aggTable, aggCol, aggFunc);
+    }
     cout << endl;
+}
+
+// ============================================================
+//  PROCESS JOIN AGGREGATION
+// ============================================================
+void Engine::processJoinAggregation(const vector<vector<string>>& resultRows,
+                                    const Table& tA, const Table& tB,
+                                    const string& aggTable, const string& aggCol,
+                                    AggregationFunction aggFunc) {
+    int aggIdx = -1;
+    bool isInt = false;
+    
+    // Find column index in the joined result schema
+    // The joined schema is tA.schema followed by tB.schema
+    if (aggTable == tA.name || aggTable == "") {
+        for (size_t i = 0; i < tA.schema.size(); i++) {
+            if (tA.schema[i].name == aggCol) {
+                aggIdx = (int)i;
+                isInt = (tA.schema[i].type == "INT");
+                break;
+            }
+        }
+    }
+    if (aggIdx == -1 && (aggTable == tB.name || aggTable == "")) {
+        for (size_t i = 0; i < tB.schema.size(); i++) {
+            if (tB.schema[i].name == aggCol) {
+                aggIdx = (int)(tA.schema.size() + i);
+                isInt = (tB.schema[i].type == "INT");
+                break;
+            }
+        }
+    }
+
+    if (aggIdx == -1) {
+        cerr << "\n[Error] Aggregation column '" << aggCol << "' join output mein nahi mila!" << endl;
+        return;
+    } 
+    
+    if (!isInt && aggFunc != AGG_COUNT) {
+        cerr << "\n[Error] Aggregation sirf INT columns par kaam karta hai (except COUNT)!" << endl;
+        return;
+    } 
+    
+    string funcStr = "";
+    double result = 0;
+    int count = 0;
+    long long sum = 0;
+    long long minVal = 0;
+    long long maxVal = 0;
+    bool first = true;
+
+    for (const auto& row : resultRows) {
+        if (row.size() <= (size_t)aggIdx) continue;
+        string valStr = row[aggIdx];
+        if (valStr == "NULL" || valStr.empty()) continue;
+
+        count++;
+        if (isInt) {
+            long long val = -1;
+            try { val = stoll(valStr); } catch(...) { continue; }
+            sum += val;
+            if (first) {
+                minVal = val;
+                maxVal = val;
+                first = false;
+            } else {
+                if (val < minVal) minVal = val;
+                if (val > maxVal) maxVal = val;
+            }
+        }
+    }
+
+    switch (aggFunc) {
+        case AGG_SUM: funcStr = "SUM"; result = sum; break;
+        case AGG_AVG: funcStr = "AVG"; result = count > 0 ? (double)sum / count : 0; break;
+        case AGG_COUNT: funcStr = "COUNT"; result = count; break;
+        case AGG_MIN: funcStr = "MIN"; result = minVal; break;
+        case AGG_MAX: funcStr = "MAX"; result = maxVal; break;
+        default: return;
+    }
+
+    string actualTable = (aggTable.empty() ? "" : aggTable + ".");
+    cout << "\n>> AGGREGATE ON JOIN: " << funcStr << " of " << actualTable << aggCol << endl;
+    cout << endl;
+    cout << "  +----------------------+----------------------+" << endl;
+    cout << "  | " << left << setw(20) << (funcStr + "(" + aggCol + ")") << " | " << left << setw(20) << result << " |" << endl;
+    cout << "  +----------------------+----------------------+" << endl;
+    cout << endl;
+
+    string txtName = "output_join_agg_" + funcStr + "_" + aggCol + ".txt";
+    string joinDesc = tA.name + "_" + tB.name;
+    saveAggregateOutput(txtName, "JOIN(" + joinDesc + ")", actualTable + aggCol, funcStr, result);
 }

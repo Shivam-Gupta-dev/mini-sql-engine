@@ -11,6 +11,7 @@
  *  Supported operations:
  *    - INNER JOIN (nested-loop)
  *    - LEFT JOIN  (nested-loop with NULL padding)
+ *    - AGGREGATION (sum, avg, count, min, max on a single column)
  *
  *  Schema validation is performed before every join:
  *    - Both tables must exist
@@ -41,13 +42,18 @@ public:
     // INNER JOIN: For each row in A, for each row in B,
     // if A[colA] == B[colB], print the merged row.
     void innerJoin(const string &tableA, const string &tableB,
-                   const string &colA, const string &colB);
+                   const string &colA, const string &colB,
+                   const string &aggTable, const string &aggCol, AggregationFunction aggFunc);
 
     // LEFT JOIN: For each row in A,
     //   if match found in B → print merged row
     //   else → print A row + NULL for all B columns
     void leftJoin(const string &tableA, const string &tableB,
-                  const string &colA, const string &colB);
+                  const string &colA, const string &colB,
+                  const string &aggTable, const string &aggCol, AggregationFunction aggFunc);
+
+    // ---- Aggregation operation ----
+    void aggregate(const string &tableName, const string &columnName, AggregationFunction func);
 
 private:
     // Cache of loaded tables to avoid re-reading files
@@ -55,6 +61,12 @@ private:
 
     // Load a table (from cache or from file). Returns true on success.
     bool loadTable(const string &tableName, Table &table);
+
+    // Process aggregation on joined rows
+    void processJoinAggregation(const vector<vector<string>> &resultRows,
+                                const Table &tA, const Table &tB,
+                                const string &aggTable, const string &aggCol,
+                                AggregationFunction aggFunc);
 
     // Validate that both tables and columns exist before joining.
     // Also warns if join is not on a PK-FK relationship.
@@ -92,6 +104,11 @@ private:
                         const string &colA, const string &colB,
                         const string &joinType,
                         const vector<vector<string>> &resultRows);
+
+    // Save aggregation results to output files
+    void saveAggregateOutput(const string &fileName, const string &tableName,
+                             const string &colName, const string &funcStr,
+                             double result);
 };
 
 #endif // ENGINE_H

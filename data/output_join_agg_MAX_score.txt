@@ -1,0 +1,9 @@
+# Aggregation Output
+# Table: JOIN(students_marks)
+# Column: marks.score
+# Function: MAX
+# Generated: Thu Apr 16 17:35:27 2026
+
++----------------------+----------------------+
+| MAX(marks.score)     | 90                   |
++----------------------+----------------------+

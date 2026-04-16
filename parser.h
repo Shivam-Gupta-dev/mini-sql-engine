@@ -38,8 +38,18 @@ enum CommandType {
     CMD_UNKNOWN         // Unrecognized command
 };
 
+enum AggregationFunction {
+    AGG_SUM,
+    AGG_AVG,
+    AGG_COUNT,
+    AGG_MIN,
+    AGG_MAX,
+    AGG_NONE
+};
+
 // Struct holding all parsed information from a command
 // For joins: both table names + join condition (tableA.colA = tableB.colB)
+// For aggregations: table name, column name, and aggregation function
 struct ParsedCommand {
     CommandType type;
 
@@ -48,6 +58,10 @@ struct ParsedCommand {
 
     string leftColumn;      // Left join column (from leftTable)
     string rightColumn;     // Right join column (from rightTable)
+
+    string aggTable;        // Table name for aggregation
+    string aggColumn;       // Column name for aggregation
+    AggregationFunction aggFunc; // Type of aggregation function
 };
 
 class Parser {

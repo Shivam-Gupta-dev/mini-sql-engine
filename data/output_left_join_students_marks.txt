@@ -1,7 +1,7 @@
 # Join Output
 # Type: LEFT JOIN
 # Condition: students.id = marks.student_id
-# Generated: Wed Mar  4 18:05:22 2026
+# Generated: Thu Apr 16 17:35:27 2026
 # Rows: 4
 
 +-------------+---------------+--------------+---------------+------------------+---------------+-------------+

@@ -1,0 +1,9 @@
+# Aggregation Output
+# Table: JOIN(marks_students)
+# Column: marks.mark_id
+# Function: SUM
+# Generated: Thu Apr 16 12:59:56 2026
+
++----------------------+----------------------+
+| SUM(marks.mark_id)   | 6                    |
++----------------------+----------------------+

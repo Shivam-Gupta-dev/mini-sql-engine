@@ -1,0 +1,9 @@
+# Aggregation Output
+# Table: JOIN(marks_students)
+# Column: marks.student_id
+# Function: AVG
+# Generated: Thu Apr 16 13:19:21 2026
+
++----------------------+----------------------+
+| AVG(marks.student_id) | 1.33333              |
++----------------------+----------------------+
