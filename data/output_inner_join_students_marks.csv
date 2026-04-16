@@ -1,4 +1,0 @@
-students.id,students.name,students.age,marks.mark_id,marks.student_id,marks.subject,marks.score
-1,Shivam,21,1,1,Math,90
-1,Shivam,21,2,1,Physics,85
-2,Rahul,22,3,2,Math,70

@@ -1,9 +1,0 @@
-# Aggregation Output
-# Table: JOIN(marks_students)
-# Column: marks.mark_id
-# Function: COUNT
-# Generated: Thu Apr 16 13:19:00 2026
-
-+----------------------+----------------------+
-| COUNT(marks.mark_id) | 3                    |
-+----------------------+----------------------+

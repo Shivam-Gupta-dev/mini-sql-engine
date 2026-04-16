@@ -1,9 +1,0 @@
-# Aggregation Output
-# Table: JOIN(marks_students)
-# Column: students.id
-# Function: AVG
-# Generated: Thu Apr 16 13:19:39 2026
-
-+----------------------+----------------------+
-| AVG(students.id)     | 2                    |
-+----------------------+----------------------+
