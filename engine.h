@@ -73,14 +73,14 @@ private:
     bool validateJoin(const Table &tA, const Table &tB,
                       const string &colA, const string &colB);
 
-    // Print the combined header row: tableA.col1 | tableA.col2 | ... | tableB.col1 | ...
-    void printJoinHeader(const Table &tA, const Table &tB);
+    // Print a complete joined table with widths based on headers and result values.
+    int printJoinTable(const Table &tA, const Table &tB,
+                       const vector<vector<string>> &resultRows);
 
-    // Print a merged data row from two tables
+    // Legacy row printers retained for focused terminal formatting helpers.
+    void printJoinHeader(const Table &tA, const Table &tB);
     void printJoinRow(const Table &tA, const vector<string> &rowA,
                       const Table &tB, const vector<string> &rowB);
-
-    // Print a left-join row where B has no match (NULLs for B columns)
     void printLeftNullRow(const Table &tA, const vector<string> &rowA,
                           const Table &tB);
 

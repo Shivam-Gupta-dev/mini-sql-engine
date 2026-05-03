@@ -35,6 +35,16 @@
 #include <fstream>
 #include <ctime>
 
+static ofstream openDataOutputFile(const string& fileName, string& filePath) {
+    filePath = "data/" + fileName;
+    ofstream outFile(filePath);
+    if (!outFile.is_open()) {
+        filePath = "HinglishDB/data/" + fileName;
+        outFile.open(filePath);
+    }
+    return outFile;
+}
+
 // ============================================================
 //  saveJoinOutput — Write join results to a file in data/
 // ============================================================
@@ -44,11 +54,11 @@
 //   - All result rows (comma-separated)
 //   - Row count summary
 void Engine::saveJoinOutput(const string& fileName, const Table& tA, const Table& tB,
-                            const string& colA, const string& colB,
-                            const string& joinType,
+                            const string& /*colA*/, const string& /*colB*/,
+                            const string& /*joinType*/,
                             const vector<vector<string>>& resultRows) {
-    string filePath = "data/" + fileName;
-    ofstream outFile(filePath);
+    string filePath;
+    ofstream outFile = openDataOutputFile(fileName, filePath);
     if (!outFile.is_open()) {
         cerr << "[Error] Output file '" << filePath << "' create nahi ho saka!" << endl;
         return;
@@ -88,8 +98,8 @@ void Engine::saveTextOutput(const string& fileName, const Table& tA, const Table
                             const string& colA, const string& colB,
                             const string& joinType,
                             const vector<vector<string>>& resultRows) {
-    string filePath = "data/" + fileName;
-    ofstream outFile(filePath);
+    string filePath;
+    ofstream outFile = openDataOutputFile(fileName, filePath);
     if (!outFile.is_open()) {
         cerr << "[Error] Output file '" << filePath << "' create nahi ho saka!" << endl;
         return;
@@ -157,8 +167,8 @@ void Engine::saveTextOutput(const string& fileName, const Table& tA, const Table
 void Engine::saveAggregateOutput(const string& fileName, const string& tableName,
                                  const string& colName, const string& funcStr,
                                  double result) {
-    string filePath = "data/" + fileName;
-    ofstream outFile(filePath);
+    string filePath;
+    ofstream outFile = openDataOutputFile(fileName, filePath);
     if (!outFile.is_open()) {
         cerr << "[Error] Output file '" << filePath << "' create nahi ho saka!" << endl;
         return;
@@ -182,6 +192,91 @@ void Engine::saveAggregateOutput(const string& fileName, const string& tableName
 
 // ============================================================
 //  loadTable — Load a table from file (with caching)
+// ============================================================
+// ============================================================
+//  aggregate - Run aggregation directly on a single table column
+// ============================================================
+void Engine::aggregate(const string& tableName, const string& columnName,
+                       AggregationFunction func) {
+    Table table;
+    if (!loadTable(tableName, table)) {
+        cerr << "[Error] Table '" << tableName << "' load nahi ho saka!" << endl;
+        return;
+    }
+
+    int colIdx = table.getColumnIndex(columnName);
+    if (colIdx < 0) {
+        cerr << "[Error] Column '" << columnName << "' table '"
+             << table.name << "' mein nahi hai!" << endl;
+        return;
+    }
+
+    const Column& col = table.schema[colIdx];
+    bool isInt = (col.type == "INT");
+    if (!isInt && func != AGG_COUNT) {
+        cerr << "[Error] Aggregation sirf INT columns par kaam karta hai (except COUNT)!" << endl;
+        return;
+    }
+
+    string funcStr;
+    double result = 0;
+    int count = 0;
+    long long sum = 0;
+    long long minVal = 0;
+    long long maxVal = 0;
+    bool first = true;
+
+    for (const auto& row : table.rows) {
+        if ((size_t)colIdx >= row.size()) continue;
+        string valStr = row[colIdx];
+        if (valStr == "NULL" || valStr.empty()) continue;
+
+        count++;
+        if (isInt) {
+            long long val = 0;
+            try {
+                val = stoll(valStr);
+            } catch (...) {
+                count--;
+                continue;
+            }
+
+            sum += val;
+            if (first) {
+                minVal = val;
+                maxVal = val;
+                first = false;
+            } else {
+                minVal = min(minVal, val);
+                maxVal = max(maxVal, val);
+            }
+        }
+    }
+
+    switch (func) {
+        case AGG_SUM: funcStr = "SUM"; result = sum; break;
+        case AGG_AVG: funcStr = "AVG"; result = count > 0 ? (double)sum / count : 0; break;
+        case AGG_COUNT: funcStr = "COUNT"; result = count; break;
+        case AGG_MIN: funcStr = "MIN"; result = count > 0 ? minVal : 0; break;
+        case AGG_MAX: funcStr = "MAX"; result = count > 0 ? maxVal : 0; break;
+        default: return;
+    }
+
+    cout << "\n>> AGGREGATE: " << funcStr << " of "
+         << tableName << "." << columnName << endl;
+    cout << endl;
+    cout << "  +----------------------+----------------------+" << endl;
+    cout << "  | " << left << setw(20) << (funcStr + "(" + columnName + ")")
+         << " | " << left << setw(20) << result << " |" << endl;
+    cout << "  +----------------------+----------------------+" << endl;
+    cout << endl;
+
+    string txtName = "output_agg_" + tableName + "_" + funcStr + "_" + columnName + ".txt";
+    saveAggregateOutput(txtName, tableName, columnName, funcStr, result);
+}
+
+// ============================================================
+//  loadTable - Load a table from file (with caching)
 // ============================================================
 // If the table is already in the cache, return it directly.
 // Otherwise, load from data/<tableName>.tbl and cache it.
@@ -270,29 +365,53 @@ void Engine::printSeparator(int totalWidth) {
 //  printJoinHeader — Print the combined column header
 // ============================================================
 // Format: tableA.col1 | tableA.col2 | ... | tableB.col1 | ...
-// Each column cell is 20 chars wide for alignment.
-void Engine::printJoinHeader(const Table& tA, const Table& tB) {
-    int colWidth = 20;
-    int totalCols = (int)(tA.schema.size() + tB.schema.size());
-    int totalWidth = totalCols * (colWidth + 3) + 1;
+// Each column width is based on the longest header or value.
+int Engine::printJoinTable(const Table& tA, const Table& tB,
+                           const vector<vector<string>>& resultRows) {
+    vector<string> headers;
+    for (const auto& col : tA.schema) {
+        headers.push_back(tA.name + "." + col.name);
+    }
+    for (const auto& col : tB.schema) {
+        headers.push_back(tB.name + "." + col.name);
+    }
+
+    vector<int> widths(headers.size());
+    for (size_t i = 0; i < headers.size(); i++) {
+        widths[i] = (int)headers[i].size();
+    }
+    for (const auto& row : resultRows) {
+        for (size_t i = 0; i < row.size() && i < widths.size(); i++) {
+            widths[i] = max(widths[i], (int)row[i].size());
+        }
+    }
+
+    int totalWidth = 1;
+    for (int width : widths) {
+        totalWidth += width + 3;
+    }
 
     cout << endl;
     printSeparator(totalWidth);
 
     cout << "  |";
-    // Table A columns
-    for (const auto& col : tA.schema) {
-        string header = tA.name + "." + col.name;
-        cout << " " << left << setw(colWidth) << header << "|";
-    }
-    // Table B columns
-    for (const auto& col : tB.schema) {
-        string header = tB.name + "." + col.name;
-        cout << " " << left << setw(colWidth) << header << "|";
+    for (size_t i = 0; i < headers.size(); i++) {
+        cout << " " << left << setw(widths[i]) << headers[i] << "|";
     }
     cout << endl;
+    printSeparator(totalWidth);
+
+    for (const auto& row : resultRows) {
+        cout << "  |";
+        for (size_t i = 0; i < headers.size(); i++) {
+            string val = (i < row.size()) ? row[i] : "";
+            cout << " " << left << setw(widths[i]) << val << "|";
+        }
+        cout << endl;
+    }
 
     printSeparator(totalWidth);
+    return totalWidth;
 }
 
 // ============================================================
@@ -406,13 +525,6 @@ void Engine::innerJoin(const string& tableA, const string& tableB,
     cout << "\n>> INNER JOIN: " << tableA << "." << colA
          << " = " << tableB << "." << colB << endl;
 
-    // Print header
-    printJoinHeader(tA, tB);
-
-    int colWidth = 20;
-    int totalCols = (int)(tA.schema.size() + tB.schema.size());
-    int totalWidth = totalCols * (colWidth + 3) + 1;
-
     // Nested loop join — collect results for both display and file output
     vector<vector<string>> resultRows;
     int matchCount = 0;
@@ -420,7 +532,6 @@ void Engine::innerJoin(const string& tableA, const string& tableB,
         for (const auto& rowB : tB.rows) {
             // Join condition: compare values at specified columns
             if (rowA[idxA] == rowB[idxB]) {
-                printJoinRow(tA, rowA, tB, rowB);
                 // Build merged row for file output
                 vector<string> merged;
                 merged.insert(merged.end(), rowA.begin(), rowA.end());
@@ -431,7 +542,7 @@ void Engine::innerJoin(const string& tableA, const string& tableB,
         }
     }
 
-    printSeparator(totalWidth);
+    printJoinTable(tA, tB, resultRows);
     cout << "\n  Total matched rows: " << matchCount << endl;
 
     if (matchCount == 0) {
@@ -498,13 +609,6 @@ void Engine::leftJoin(const string& tableA, const string& tableB,
     cout << "\n>> LEFT JOIN: " << tableA << "." << colA
          << " = " << tableB << "." << colB << endl;
 
-    // Print header
-    printJoinHeader(tA, tB);
-
-    int colWidth = 20;
-    int totalCols = (int)(tA.schema.size() + tB.schema.size());
-    int totalWidth = totalCols * (colWidth + 3) + 1;
-
     // Nested loop left join — collect results for both display and file output
     vector<vector<string>> resultRows;
     int totalRows = 0;
@@ -513,7 +617,6 @@ void Engine::leftJoin(const string& tableA, const string& tableB,
 
         for (const auto& rowB : tB.rows) {
             if (rowA[idxA] == rowB[idxB]) {
-                printJoinRow(tA, rowA, tB, rowB);
                 // Build merged row for file output
                 vector<string> merged;
                 merged.insert(merged.end(), rowA.begin(), rowA.end());
@@ -526,7 +629,6 @@ void Engine::leftJoin(const string& tableA, const string& tableB,
 
         // If no match found for this left row, pad B side with NULLs
         if (!matched) {
-            printLeftNullRow(tA, rowA, tB);
             // Build NULL-padded row for file output
             vector<string> merged;
             merged.insert(merged.end(), rowA.begin(), rowA.end());
@@ -538,7 +640,7 @@ void Engine::leftJoin(const string& tableA, const string& tableB,
         }
     }
 
-    printSeparator(totalWidth);
+    printJoinTable(tA, tB, resultRows);
     cout << "\n  Total result rows: " << totalRows << endl;
 
     // Save results to output files (CSV + TXT)

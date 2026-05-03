@@ -4,10 +4,8 @@ A user-friendly interface for the HinglishDB join engine
 """
 
 import streamlit as st
-import os
 import subprocess
 import pandas as pd
-import re
 from pathlib import Path
 
 # ============================================================================
@@ -15,13 +13,13 @@ from pathlib import Path
 # ============================================================================
 st.set_page_config(
     page_title="HinglishDB UI",
-    page_icon="🗂️",
+    page_icon="H",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
 # App title and description
-st.title("🗂️ HinglishDB Join Engine")
+st.title("HinglishDB Join Engine")
 st.markdown("""
 A **file-based mini relational processor** that understands **Hinglish** (Hindi + English) commands
 to perform database JOIN operations on pre-existing table files.
@@ -193,7 +191,7 @@ def load_csv_output(join_type, table1, table2):
 # Sidebar - Command Builder
 # ============================================================================
 with st.sidebar:
-    st.header("⚙️ Query Builder")
+    st.header("Query Builder")
 
     # Get available tables
     tables = get_available_tables()
@@ -247,7 +245,7 @@ with st.sidebar:
         st.code(hinglish_cmd, language="text")
 
         # Execute Button
-        if st.button("▶️ Execute Query", use_container_width=True, type="primary"):
+        if st.button("Execute Query", use_container_width=True, type="primary"):
             with st.spinner("Executing query..."):
                 stdout, stderr = execute_command(hinglish_cmd)
 
@@ -266,10 +264,10 @@ with st.sidebar:
 # ============================================================================
 
 if "last_output" not in st.session_state:
-    st.info("👈 Use the sidebar to build and execute a query")
+    st.info("Use the sidebar to build and execute a query")
 else:
     # Tabs for different output views
-    tab1, tab2, tab3 = st.tabs(["📊 Results", "📝 Hinglish Command", "🖥️ Raw Output"])
+    tab1, tab2, tab3 = st.tabs(["Results", "Hinglish Command", "Raw Output"])
 
     with tab1:
         st.subheader("Query Results")
@@ -283,12 +281,12 @@ else:
 
         if df is not None:
             st.dataframe(df, use_container_width=True)
-            st.info(f"✅ {len(df)} rows returned")
+            st.info(f"{len(df)} rows returned")
 
             # Download CSV
             csv = df.to_csv(index=False)
             st.download_button(
-                label="📥 Download as CSV",
+                label="Download as CSV",
                 data=csv,
                 file_name=f"join_result.csv",
                 mime="text/csv"
@@ -327,7 +325,7 @@ else:
 # ============================================================================
 # Information Section
 # ============================================================================
-with st.expander("ℹ️ About HinglishDB"):
+with st.expander("About HinglishDB"):
     col1, col2 = st.columns(2)
 
     with col1:
@@ -348,7 +346,7 @@ with st.expander("ℹ️ About HinglishDB"):
         for table_name, columns in tables.items():
             st.write(f"**{table_name}**: {', '.join(columns)}")
 
-with st.expander("📚 Example Commands"):
+with st.expander("Example Commands"):
     st.markdown("""
     **INNER JOIN Example:**
     ```

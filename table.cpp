@@ -45,8 +45,17 @@ bool Table::loadFromFile(const string& tableName) {
     rows.clear();
 
     // Build file path: data/<tableName>.tbl
+    // If the executable is launched from the parent project folder, fall back
+    // to HinglishDB/data/<tableName>.tbl.
     string filePath = "data/" + tableName + ".tbl";
     ifstream file(filePath);
+    if (!file.is_open()) {
+        string fallbackPath = "HinglishDB/data/" + tableName + ".tbl";
+        file.open(fallbackPath);
+        if (file.is_open()) {
+            filePath = fallbackPath;
+        }
+    }
     if (!file.is_open()) {
         cerr << "[Error] Table file '" << filePath << "' nahi mila! (File not found)" << endl;
         return false;
