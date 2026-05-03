@@ -37,8 +37,6 @@ public:
     // Execute a fully parsed command (routes to join or exit)
     void execute(const ParsedCommand &cmd);
 
-    // ---- Join operations ----
-
     // INNER JOIN: For each row in A, for each row in B,
     // if A[colA] == B[colB], print the merged row.
     void innerJoin(const string &tableA, const string &tableB,
@@ -59,40 +57,20 @@ private:
     // Cache of loaded tables to avoid re-reading files
     map<string, Table> tableCache;
 
-    // Load a table (from cache or from file). Returns true on success.
-    bool loadTable(const string &tableName, Table &table);
-
     // Process aggregation on joined rows
     void processJoinAggregation(const vector<vector<string>> &resultRows,
                                 const Table &tA, const Table &tB,
                                 const string &aggTable, const string &aggCol,
                                 AggregationFunction aggFunc);
 
+    // Load a table (from cache or from file). Returns true on success.
+    bool loadTable(const string &tableName, Table &table);
+
     // Validate that both tables and columns exist before joining.
     // Also warns if join is not on a PK-FK relationship.
     bool validateJoin(const Table &tA, const Table &tB,
                       const string &colA, const string &colB);
 
-    // Print a complete joined table with widths based on headers and result values.
-    int printJoinTable(const Table &tA, const Table &tB,
-                       const vector<vector<string>> &resultRows);
-
-    // Legacy row printers retained for focused terminal formatting helpers.
-    void printJoinHeader(const Table &tA, const Table &tB);
-    void printJoinRow(const Table &tA, const vector<string> &rowA,
-                      const Table &tB, const vector<string> &rowB);
-    void printLeftNullRow(const Table &tA, const vector<string> &rowA,
-                          const Table &tB);
-
-    // Print a horizontal separator line
-    void printSeparator(int totalWidth);
-
-    // Save join results to an output file in data/ folder.
-    // fileName: output file name (e.g. "inner_join_students_marks.txt")
-    // header: column header strings
-    // resultRows: each row is a vector of cell values
-    // joinType: "INNER JOIN" or "LEFT JOIN" (for the file header)
-    // tableA, tableB, colA, colB: join metadata for the file header
     // Save join results as a clean CSV file (header + data rows)
     void saveJoinOutput(const string &fileName, const Table &tA, const Table &tB,
                         const string &colA, const string &colB,
@@ -109,6 +87,19 @@ private:
     void saveAggregateOutput(const string &fileName, const string &tableName,
                              const string &colName, const string &funcStr,
                              double result);
+
+    // Print a complete joined table with widths based on headers and result values.
+    int printJoinTable(const Table &tA, const Table &tB,
+                       const vector<vector<string>> &resultRows);
+
+    // Print a horizontal separator line
+    void printSeparator(int totalWidth);
+
+    // Legacy row printers retained for focused terminal formatting helpers.
+    void printJoinRow(const Table &tA, const vector<string> &rowA,
+                      const Table &tB, const vector<string> &rowB);
+    void printLeftNullRow(const Table &tA, const vector<string> &rowA,
+                          const Table &tB);
 };
 
 #endif // ENGINE_H
