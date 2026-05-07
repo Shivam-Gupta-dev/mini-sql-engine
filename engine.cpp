@@ -48,8 +48,8 @@ static ofstream openDataOutputFile(const string& fileName, string& filePath) {
 // ============================================================
 //  execute - Route a parsed command to the appropriate method
 // ============================================================
-void Engine::execute(const ParsedCommand& cmd) {
-    switch (cmd.type) {
+void Engine::execute(const ParsedCommand& cmd) {  
+    switch (cmd.type) { 
         case CMD_INNER_JOIN:
             innerJoin(cmd.leftTable, cmd.rightTable,
                       cmd.leftColumn, cmd.rightColumn,
@@ -60,6 +60,22 @@ void Engine::execute(const ParsedCommand& cmd) {
             leftJoin(cmd.leftTable, cmd.rightTable,
                      cmd.leftColumn, cmd.rightColumn,
                      cmd.aggTable, cmd.aggColumn, cmd.aggFunc);
+            break;
+
+        case CMD_INNER_JOIN_3:
+            threeTableJoin(cmd.leftTable, cmd.rightTable, cmd.thirdTable,
+                           cmd.leftColumn, cmd.rightColumn,
+                           cmd.secondJoinTable, cmd.secondLeftColumn, cmd.thirdColumn,
+                           false,
+                           cmd.aggTable, cmd.aggColumn, cmd.aggFunc);
+            break;
+
+        case CMD_LEFT_JOIN_3:
+            threeTableJoin(cmd.leftTable, cmd.rightTable, cmd.thirdTable,
+                           cmd.leftColumn, cmd.rightColumn,
+                           cmd.secondJoinTable, cmd.secondLeftColumn, cmd.thirdColumn,
+                           true,
+                           cmd.aggTable, cmd.aggColumn, cmd.aggFunc);
             break;
 
         case CMD_EXIT:
@@ -77,6 +93,124 @@ void Engine::execute(const ParsedCommand& cmd) {
     }
 }
 
+void Engine::threeTableJoin(const string& tableA, const string& tableB, const string& tableC,
+                            const string& colA, const string& colB,
+                            const string& secondTableName, const string& secondCol, const string& colC,
+                            bool leftJoinMode,
+                            const string& /*aggTable*/, const string& /*aggCol*/,
+                            AggregationFunction aggFunc) {
+    Table tA, tB, tC;
+    if (!loadTable(tableA, tA)) {
+        cerr << "[Error] Table '" << tableA << "' load nahi ho saka!" << endl;
+        return;
+    }
+    if (!loadTable(tableB, tB)) {
+        cerr << "[Error] Table '" << tableB << "' load nahi ho saka!" << endl;
+        return;
+    }
+    if (!loadTable(tableC, tC)) {
+        cerr << "[Error] Table '" << tableC << "' load nahi ho saka!" << endl;
+        return;
+    }
+
+    cout << "\n[Info] Loading schemas..." << endl;
+    tA.printSchema();
+    tB.printSchema();
+    tC.printSchema();
+
+    if (!validateJoin(tA, tB, colA, colB)) {
+        return;
+    }
+
+    const Table* secondTable = nullptr;
+    if (secondTableName == tA.name) {
+        secondTable = &tA;
+    } else if (secondTableName == tB.name) {
+        secondTable = &tB;
+    } else {
+        cerr << "[Error] Second join table '" << secondTableName
+             << "' pehle joined tables mein nahi hai." << endl;
+        return;
+    }
+
+    if (!validateJoin(*secondTable, tC, secondCol, colC)) {
+        return;
+    }
+
+    int idxA = tA.getColumnIndex(colA);
+    int idxB = tB.getColumnIndex(colB);
+    int idxSecond = secondTable->getColumnIndex(secondCol);
+    int idxC = tC.getColumnIndex(colC);
+
+    cout << "\n>> " << (leftJoinMode ? "3-TABLE LEFT JOIN: " : "3-TABLE INNER JOIN: ")
+         << tableA << "." << colA << " = " << tableB << "." << colB
+         << " AND " << secondTable->name << "." << secondCol
+         << " = " << tableC << "." << colC << endl;
+
+    vector<vector<string>> resultRows;
+    int totalRows = 0;
+
+    for (const auto& rowA : tA.rows) {
+        bool matchedAB = false;
+
+        for (const auto& rowB : tB.rows) {
+            if (rowA[idxA] != rowB[idxB]) {
+                continue;
+            }
+
+            matchedAB = true;
+            const vector<string>& secondRow = (secondTable->name == tA.name) ? rowA : rowB;
+            bool matchedC = false;
+
+            for (const auto& rowC : tC.rows) {
+                if (secondRow[idxSecond] == rowC[idxC]) {
+                    vector<string> merged;
+                    merged.insert(merged.end(), rowA.begin(), rowA.end());
+                    merged.insert(merged.end(), rowB.begin(), rowB.end());
+                    merged.insert(merged.end(), rowC.begin(), rowC.end());
+                    resultRows.push_back(merged);
+                    matchedC = true;
+                    totalRows++;
+                }
+            }
+
+            if (leftJoinMode && !matchedC) {
+                vector<string> merged;
+                merged.insert(merged.end(), rowA.begin(), rowA.end());
+                merged.insert(merged.end(), rowB.begin(), rowB.end());
+                for (size_t i = 0; i < tC.schema.size(); i++) {
+                    merged.push_back("NULL");
+                }
+                resultRows.push_back(merged);
+                totalRows++;
+            }
+        }
+
+        if (leftJoinMode && !matchedAB) {
+            vector<string> merged;
+            merged.insert(merged.end(), rowA.begin(), rowA.end());
+            for (size_t i = 0; i < tB.schema.size() + tC.schema.size(); i++) {
+                merged.push_back("NULL");
+            }
+            resultRows.push_back(merged);
+            totalRows++;
+        }
+    }
+
+    vector<Table> tables = {tA, tB, tC};
+    printGenericJoinTable(tables, resultRows);
+    cout << "\n  Total result rows: " << totalRows << endl;
+
+    string prefix = leftJoinMode ? "output_left_join_3_" : "output_inner_join_3_";
+    saveThreeTableOutput(prefix + tableA + "_" + tableB + "_" + tableC + ".csv",
+                         tables, resultRows);
+
+    if (aggFunc != AGG_NONE) {
+        cout << "  [Info] 3-table join aggregation abhi supported nahi hai." << endl;
+    }
+    cout << endl;
+}
+
 // ============================================================
 //  INNER JOIN
 // ============================================================
@@ -91,7 +225,7 @@ void Engine::execute(const ParsedCommand& cmd) {
 void Engine::innerJoin(const string& tableA, const string& tableB,
                        const string& colA, const string& colB,
                        const string& aggTable, const string& aggCol,
-                       AggregationFunction aggFunc) {
+                       AggregationFunction aggFunc) { 
     // Load both tables
     Table tA, tB;
     if (!loadTable(tableA, tA)) {
@@ -118,7 +252,7 @@ void Engine::innerJoin(const string& tableA, const string& tableB,
     int idxB = tB.getColumnIndex(colB);
 
     cout << "\n>> INNER JOIN: " << tableA << "." << colA
-         << " = " << tableB << "." << colB << endl;
+        << " = " << tableB << "." << colB << endl;
 
     // Nested loop join — collect results for both display and file output
     vector<vector<string>> resultRows;
@@ -260,8 +394,8 @@ void Engine::processJoinAggregation(const vector<vector<string>>& resultRows,
     int aggIdx = -1;
     bool isInt = false;
 
-    // Find column index in the joined result schema
-    // The joined schema is tA.schema followed by tB.schema
+    // Find column index in the joined result schema 
+    // The joined schema is tA.schema followed by tB.schema 
     if (aggTable == tA.name || aggTable == "") {
         for (size_t i = 0; i < tA.schema.size(); i++) {
             if (tA.schema[i].name == aggCol) {
@@ -485,18 +619,26 @@ bool Engine::validateJoin(const Table& tA, const Table& tB,
     if (cA.isForeignKey) {
         if (cA.refTable != tB.name || cA.refColumn != colB) {
             cerr << "[Warning] Foreign key '" << tA.name << "." << colA
-                 << "' references '" << cA.refTable << "(" << cA.refColumn
-                 << ")' but join is on '" << tB.name << "." << colB << "'." << endl;
+                << "' references '" << cA.refTable << "(" << cA.refColumn
+                << ")' but join is on '" << tB.name << "." << colB << "'." << endl;
         }
     }
 
-    // Warn if join is not on a PK-FK relationship
-    bool pkfk = false;
-    if (cA.isPrimaryKey && cB.isForeignKey) pkfk = true;
-    if (cB.isPrimaryKey && cA.isForeignKey) pkfk = true;
+    bool validPkFk = false;
+    if (cA.isPrimaryKey && cB.isForeignKey &&
+        cB.refTable == tA.name && cB.refColumn == colA) {
+        validPkFk = true;
+    }
+    if (cB.isPrimaryKey && cA.isForeignKey &&
+        cA.refTable == tB.name && cA.refColumn == colB) {
+        validPkFk = true;
+    }
 
-    if (!pkfk) {
-        cout << "[Info] Yeh join PK-FK relationship par nahi hai. Results unexpected ho sakte hain." << endl;
+    if (!validPkFk) {
+        cerr << "[Error] Join blocked: valid PK-FK relationship required between '"
+             << tA.name << "." << colA << "' and '" << tB.name << "." << colB << "'." << endl;
+        cerr << "        Primary key ko usi foreign key se join karo jo us table(column) ko reference karta hai." << endl;
+        return false;
     }
 
     return true;
@@ -609,6 +751,83 @@ void Engine::saveTextOutput(const string& fileName, const Table& tA, const Table
     cout << "  [Output] TXT saved to : " << filePath << endl;
 }
 
+void Engine::saveThreeTableOutput(const string& fileName, const vector<Table>& tables,
+                                  const vector<vector<string>>& resultRows) {
+    string filePath;
+    ofstream outFile = openDataOutputFile(fileName, filePath);
+    if (!outFile.is_open()) {
+        cerr << "[Error] Output file '" << filePath << "' create nahi ho saka!" << endl;
+        return;
+    }
+
+    bool firstHeader = true;
+    for (const auto& table : tables) {
+        for (const auto& col : table.schema) {
+            if (!firstHeader) outFile << ",";
+            outFile << table.name << "." << col.name;
+            firstHeader = false;
+        }
+    }
+    outFile << endl;
+
+    for (const auto& row : resultRows) {
+        for (size_t i = 0; i < row.size(); i++) {
+            if (i > 0) outFile << ",";
+            outFile << row[i];
+        }
+        outFile << endl;
+    }
+
+    outFile.close();
+    cout << "  [Output] CSV saved to : " << filePath << endl;
+}
+
+int Engine::printGenericJoinTable(const vector<Table>& tables,
+                                  const vector<vector<string>>& resultRows) {
+    vector<string> headers;
+    for (const auto& table : tables) {
+        for (const auto& col : table.schema) {
+            headers.push_back(table.name + "." + col.name);
+        }
+    }
+
+    vector<int> widths(headers.size());
+    for (size_t i = 0; i < headers.size(); i++) {
+        widths[i] = (int)headers[i].size();
+    }
+    for (const auto& row : resultRows) {
+        for (size_t i = 0; i < row.size() && i < widths.size(); i++) {
+            widths[i] = max(widths[i], (int)row[i].size());
+        }
+    }
+
+    int totalWidth = 1;
+    for (int width : widths) {
+        totalWidth += width + 3;
+    }
+
+    cout << endl;
+    printSeparator(totalWidth);
+    cout << "  |";
+    for (size_t i = 0; i < headers.size(); i++) {
+        cout << " " << left << setw(widths[i]) << headers[i] << "|";
+    }
+    cout << endl;
+    printSeparator(totalWidth);
+
+    for (const auto& row : resultRows) {
+        cout << "  |";
+        for (size_t i = 0; i < headers.size(); i++) {
+            string val = (i < row.size()) ? row[i] : "";
+            cout << " " << left << setw(widths[i]) << val << "|";
+        }
+        cout << endl;
+    }
+
+    printSeparator(totalWidth);
+    return totalWidth;
+}
+
 // ============================================================
 //  saveAggregateOutput - Write aggregation result to file
 // ============================================================
@@ -645,7 +864,7 @@ void Engine::saveAggregateOutput(const string& fileName, const string& tableName
 // Each column width is based on the longest header or value.
 // ============================================================
 int Engine::printJoinTable(const Table& tA, const Table& tB,
-                           const vector<vector<string>>& resultRows) {
+                            const vector<vector<string>>& resultRows) {
     vector<string> headers;
     for (const auto& col : tA.schema) {
         headers.push_back(tA.name + "." + col.name);

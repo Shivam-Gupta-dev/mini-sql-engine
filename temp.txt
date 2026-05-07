@@ -1,0 +1,114 @@
+1. Column (struct)
+cppColumn col;
+col.name = "student_id";
+col.type = "INT";
+col.isPrimaryKey = true;
+col.isForeignKey = false;
+cppColumn col2;
+col2.name = "dept_id";
+col2.type = "INT";
+col2.isForeignKey = true;
+col2.refTable = "departments";
+col2.refColumn = "id";
+
+2. schema → vector<Column>
+cpp// students table ka schema
+schema = [
+    {name:"id",         type:"INT",    isPK:true,  isFK:false},
+    {name:"name",       type:"STRING", isPK:false, isFK:false},
+    {name:"dept_id",    type:"INT",    isPK:false, isFK:true, refTable:"departments"}
+]
+cpp// marks table ka schema
+schema = [
+    {name:"student_id", type:"INT",    isPK:false, isFK:true, refTable:"students"},
+    {name:"score",      type:"INT",    isPK:false, isFK:false}
+]
+
+3. rows → vector<vector<string>>
+cpp// students table ki rows
+rows = [
+    ["1", "Alice", "10"],
+    ["2", "Bob",   "20"],
+    ["3", "Carol", "10"]
+]
+
+// marks table ki rows
+rows = [
+    ["1", "95"],
+    ["2", "87"],
+    ["1", "78"]
+]
+
+4. Table (class)
+cppTable tA;
+tA.name   = "students";
+tA.schema = [ {id, INT, PK}, {name, STRING}, {dept_id, INT, FK} ];
+tA.rows   = [ ["1","Alice","10"], ["2","Bob","20"] ];
+cppTable tB;
+tB.name   = "marks";
+tB.schema = [ {student_id, INT, FK}, {score, INT} ];
+tB.rows   = [ ["1","95"], ["2","87"] ];
+
+5. tableCache → map<string, Table>
+cpptableCache = {
+    "students" → Table{ name:"students", schema:[...], rows:[[1,Alice],[2,Bob]] },
+    "marks"    → Table{ name:"marks",    schema:[...], rows:[[1,95],[2,87]]    }
+}
+cpp// Access karna
+auto it = tableCache.find("students");
+it->first   // "students"  ← key
+it->second  // Table{...}  ← value
+
+6. resultRows → vector<vector<string>>
+cpp// INNER JOIN ka output — A ki row + B ki row merge hoti hai
+resultRows = [
+    ["1", "Alice", "10",  "1", "95"],   // students row + marks row
+    ["1", "Alice", "10",  "1", "78"],   // Alice ka doosra match
+    ["2", "Bob",   "20",  "2", "87"]    // Bob ka match
+]
+
+// LEFT JOIN — no match → NULL padding
+resultRows = [
+    ["1", "Alice", "10",  "1", "95"],
+    ["3", "Carol", "10",  "NULL", "NULL"]  // Carol ka koi match nahi
+]
+
+7. tokens → vector<string>
+cpp// Input: "students aur marks ko students.id = marks.student_id par inner join karke dikha"
+
+tokens = [
+    "students", "aur", "marks", "ko",
+    "students.id", "=", "marks.student_id",
+    "par", "inner", "join", "karke", "dikha"
+]
+
+tokens[0]  // "students"
+tokens[1]  // "aur"
+tokens[8]  // "inner"
+tokens[9]  // "join"
+
+
+
+
+
+Query:
+"students aur marks ko students.id = marks.student_id par inner join karke marks.score ka sum nikal kar dikha"
+
+Tokens after tokenize():
+[0]  "students"
+[1]  "aur"
+[2]  "marks"
+[3]  "ko"
+[4]  "students.id"
+[5]  "="
+[6]  "marks.student_id"
+[7]  "par"
+[8]  "inner"
+[9]  "join"
+[10] "karke"
+[11] "marks.score"
+[12] "ka"
+[13] "sum"
+[14] "nikal"
+[15] "kar"
+[16] "dikha"

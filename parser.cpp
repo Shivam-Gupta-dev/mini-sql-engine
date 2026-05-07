@@ -79,6 +79,14 @@ vector<string> Parser::tokenize(const string& s) {
 ParsedCommand Parser::parse(const string& input) {
     ParsedCommand cmd;
     cmd.type = CMD_UNKNOWN;
+    cmd.leftTable = "";
+    cmd.rightTable = "";
+    cmd.thirdTable = "";
+    cmd.leftColumn = "";
+    cmd.rightColumn = "";
+    cmd.secondLeftColumn = "";
+    cmd.secondJoinTable = "";
+    cmd.thirdColumn = "";
     cmd.aggTable = "";
     cmd.aggColumn = "";
     cmd.aggFunc = AGG_NONE;
@@ -120,11 +128,12 @@ ParsedCommand Parser::parse(const string& input) {
     vector<string> tokens = tokenize(lower);
 
     // Step 3: Find positions of key tokens
-    int aurPos = -1, koPos = -1, parPos = -1;
+    int aurPos = -1, secondAurPos = -1, koPos = -1, parPos = -1;
     int joinPos = -1;
 
     for (int i = 0; i < (int)tokens.size(); i++) {
         if (tokens[i] == "aur" && aurPos == -1) aurPos = i;
+        else if (tokens[i] == "aur" && secondAurPos == -1 && koPos == -1) secondAurPos = i;
         else if (tokens[i] == "ko" && koPos == -1) koPos = i;
         // Find the last "par" before "join" (the one that separates condition from join type)
         else if (tokens[i] == "join") joinPos = i;
@@ -156,6 +165,16 @@ ParsedCommand Parser::parse(const string& input) {
     cmd.leftTable = tokens[aurPos - 1];
     // Right table = token after "aur"
     cmd.rightTable = tokens[aurPos + 1];
+    bool isThreeTableJoin = false;
+    if (secondAurPos > aurPos && secondAurPos + 1 < koPos) {
+        isThreeTableJoin = true;
+        cmd.rightTable = tokens[secondAurPos - 1];
+        cmd.thirdTable = tokens[secondAurPos + 1];
+        if (cmd.thirdTable == cmd.leftTable || cmd.thirdTable == cmd.rightTable) {
+            cerr << "[Error] 3-table join mein teen alag tables select karo. Aliases supported nahi hain." << endl;
+            return cmd;
+        }
+    }
 
     // Step 5: Extract join condition between "ko" and "par"
     // Expected format: <table>.<col> = <table>.<col>
@@ -170,9 +189,17 @@ ParsedCommand Parser::parse(const string& input) {
     string leftCond = tokens[koPos + 1];
     string rightCond;
 
-    // Find "=" sign in condition
-    int eqPos = -1;
+    // Find "=" sign in first condition
+    int conditionEnd = parPos;
     for (int i = koPos + 1; i < parPos; i++) {
+        if (tokens[i] == "aur") {
+            conditionEnd = i;
+            break;
+        }
+    }
+
+    int eqPos = -1;
+    for (int i = koPos + 1; i < conditionEnd; i++) {
         if (tokens[i] == "=") {
             eqPos = i;
             break;
@@ -218,16 +245,73 @@ ParsedCommand Parser::parse(const string& input) {
         swap(cmd.leftColumn, cmd.rightColumn);
     }
 
+    if (isThreeTableJoin) {
+        int condAurPos = -1;
+        for (int i = koPos + 1; i < parPos; i++) {
+            if (tokens[i] == "aur") {
+                condAurPos = i;
+                break;
+            }
+        }
+
+        if (condAurPos < 0) {
+            cerr << "[Error] 3-table join mein second condition missing hai!" << endl;
+            cerr << "  Example: students.id = enrollments.student_id aur enrollments.course_id = courses.course_id" << endl;
+            return cmd;
+        }
+
+        int secondEqPos = -1;
+        for (int i = condAurPos + 1; i < parPos; i++) {
+            if (tokens[i] == "=") {
+                secondEqPos = i;
+                break;
+            }
+        }
+
+        if (secondEqPos < 0) {
+            cerr << "[Error] Second join condition mein '=' sign nahi mila!" << endl;
+            return cmd;
+        }
+
+        string secondLeftCond = tokens[secondEqPos - 1];
+        string secondRightCond = tokens[secondEqPos + 1];
+        size_t secondDotLeft = secondLeftCond.find('.');
+        size_t secondDotRight = secondRightCond.find('.');
+
+        if (secondDotLeft == string::npos || secondDotRight == string::npos) {
+            cerr << "[Error] Second join condition mein dot (.) notation use karo!" << endl;
+            return cmd;
+        }
+
+        string secondCondLeftTable = secondLeftCond.substr(0, secondDotLeft);
+        string secondCondRightTable = secondRightCond.substr(0, secondDotRight);
+        cmd.secondLeftColumn = secondLeftCond.substr(secondDotLeft + 1);
+        cmd.thirdColumn = secondRightCond.substr(secondDotRight + 1);
+
+        if (secondCondLeftTable == cmd.thirdTable &&
+            (secondCondRightTable == cmd.leftTable || secondCondRightTable == cmd.rightTable)) {
+            swap(cmd.secondLeftColumn, cmd.thirdColumn);
+            swap(secondCondLeftTable, secondCondRightTable);
+        }
+
+        if (secondCondRightTable != cmd.thirdTable ||
+            (secondCondLeftTable != cmd.leftTable && secondCondLeftTable != cmd.rightTable)) {
+            cerr << "[Error] 3-table join ki second condition third table ko pehle joined table se connect kare." << endl;
+            return cmd;
+        }
+        cmd.secondJoinTable = secondCondLeftTable;
+    }
+
     // Step 6: Determine join type — look at the token before "join"
     if (joinPos > 0) {
         string joinModifier = tokens[joinPos - 1];
         if (joinModifier == "inner") {
-            cmd.type = CMD_INNER_JOIN;
+            cmd.type = isThreeTableJoin ? CMD_INNER_JOIN_3 : CMD_INNER_JOIN;
         } else if (joinModifier == "left") {
-            cmd.type = CMD_LEFT_JOIN;
+            cmd.type = isThreeTableJoin ? CMD_LEFT_JOIN_3 : CMD_LEFT_JOIN;
         } else if (joinModifier == "par") {
             // If "par" is right before "join", default to INNER JOIN
-            cmd.type = CMD_INNER_JOIN;
+            cmd.type = isThreeTableJoin ? CMD_INNER_JOIN_3 : CMD_INNER_JOIN;
         } else {
             cerr << "[Error] Unknown join type: '" << joinModifier << "'. Use 'inner' or 'left'." << endl;
             return cmd;

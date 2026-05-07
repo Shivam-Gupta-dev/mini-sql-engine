@@ -21,10 +21,44 @@
 
 #include <iostream>
 #include <string>
+#ifdef _WIN32
+#include <windows.h>
+#endif
 #include "parser.h"
 #include "engine.h"
 
 using namespace std;
+
+#ifdef _WIN32
+class ConsoleInputGuard {
+private:
+    HANDLE inputHandle;
+    DWORD originalMode;
+    bool active;
+
+public:
+    ConsoleInputGuard() : inputHandle(GetStdHandle(STD_INPUT_HANDLE)), originalMode(0), active(false) {
+        if (inputHandle != INVALID_HANDLE_VALUE && GetConsoleMode(inputHandle, &originalMode)) {
+            DWORD quietMode = originalMode & ~ENABLE_ECHO_INPUT;
+            if (SetConsoleMode(inputHandle, quietMode)) {
+                active = true;
+            }
+        }
+    }
+
+    void restore() {
+        if (active) {
+            FlushConsoleInputBuffer(inputHandle);
+            SetConsoleMode(inputHandle, originalMode);
+            active = false;
+        }
+    }
+
+    ~ConsoleInputGuard() {
+        restore();
+    }
+};
+#endif
 
 // ---- Display the welcome banner ----
 void showBanner() {
@@ -40,6 +74,7 @@ void showBanner() {
     cout << "  Hinglish Schema-Aware Join Engine                            " << endl;
     cout << "  File-Based Mini Relational Processor in C++                  " << endl;
     cout << "  Type 'band karo' to exit.                                    " << endl;
+    cout << "  Type 'madad' for supported commands.                         " << endl;
     cout << "================================================================" << endl;
     cout << endl;
 }
@@ -72,10 +107,14 @@ void showHelp() {
     cout << "     Example : students aur marks ko students.id = marks.student_id par inner join karke marks.score ka sum nikal kar dikha" << endl;
     cout << "     Example : students aur marks ko students.id = marks.student_id par left join karke score ka avg nikal kar dikha" << endl;
     cout << endl;
-    cout << "  5. EXIT:" << endl;
+    cout << "  5. THREE TABLE JOIN:" << endl;
+    cout << "     Syntax : <t1> aur <t2> aur <t3> ko <t1>.<pk> = <t2>.<fk> aur <t2>.<fk> = <t3>.<pk> par <inner|left> join karke dikha" << endl;
+    cout << "     Example: students aur enrollments aur courses ko students.id = enrollments.student_id aur enrollments.course_id = courses.course_id par inner join karke dikha" << endl;
+    cout << endl;
+    cout << "  6. EXIT:" << endl;
     cout << "     band karo" << endl;
     cout << endl;
-    cout << "  6. HELP:" << endl;
+    cout << "  7. HELP:" << endl;
     cout << "     madad" << endl;
     cout << endl;
 }
@@ -97,15 +136,23 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
-    // Show welcome banner only in interactive mode
+#ifdef _WIN32
+    ConsoleInputGuard startupInputGuard;
+#endif
+
+    // Show welcome banner and help only in interactive mode
     showBanner();
     showHelp();
+
+#ifdef _WIN32
+    startupInputGuard.restore();
+#endif
 
     // ---- REPL Loop (Read-Eval-Print Loop) ----
     // Continuously reads user input, parses it, and executes
     // the corresponding join operation. Exits on "band karo".
     while (true) {
-        cout << "HinglishJoin> ";
+        cout << "\nHinglishDB> " << flush;
         string input;
         getline(cin, input);
 

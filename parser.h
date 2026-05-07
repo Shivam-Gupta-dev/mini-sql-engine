@@ -34,6 +34,8 @@ using namespace std;
 enum CommandType {
     CMD_INNER_JOIN,     // INNER JOIN between two tables
     CMD_LEFT_JOIN,      // LEFT JOIN between two tables
+    CMD_INNER_JOIN_3,   // INNER JOIN across three tables
+    CMD_LEFT_JOIN_3,    // LEFT JOIN across three tables
     CMD_EXIT,           // Exit the program
     CMD_UNKNOWN         // Unrecognized command
 };
@@ -55,9 +57,13 @@ struct ParsedCommand {
 
     string leftTable;       // Left table name (first table in command)
     string rightTable;      // Right table name (second table in command)
+    string thirdTable;      // Third table name for 3-table joins
 
     string leftColumn;      // Left join column (from leftTable)
     string rightColumn;     // Right join column (from rightTable)
+    string secondLeftColumn; // First/second table column used in second join
+    string secondJoinTable;  // First/second table used in second join
+    string thirdColumn;      // Third table column used in second join
 
     string aggTable;        // Table name for aggregation
     string aggColumn;       // Column name for aggregation

@@ -50,6 +50,12 @@ public:
                   const string &colA, const string &colB,
                   const string &aggTable, const string &aggCol, AggregationFunction aggFunc);
 
+    void threeTableJoin(const string &tableA, const string &tableB, const string &tableC,
+                        const string &colA, const string &colB,
+                        const string &secondTable, const string &secondCol, const string &colC,
+                        bool leftJoinMode,
+                        const string &aggTable, const string &aggCol, AggregationFunction aggFunc);
+
     // ---- Aggregation operation ----
     void aggregate(const string &tableName, const string &columnName, AggregationFunction func);
 
@@ -82,6 +88,12 @@ private:
                         const string &colA, const string &colB,
                         const string &joinType,
                         const vector<vector<string>> &resultRows);
+
+    void saveThreeTableOutput(const string &fileName, const vector<Table> &tables,
+                              const vector<vector<string>> &resultRows);
+
+    int printGenericJoinTable(const vector<Table> &tables,
+                              const vector<vector<string>> &resultRows);
 
     // Save aggregation results to output files
     void saveAggregateOutput(const string &fileName, const string &tableName,

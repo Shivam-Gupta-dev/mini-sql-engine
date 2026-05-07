@@ -84,6 +84,21 @@ def test_invalid_table_error():
     assert_contains(output, "Table file 'data/missing.tbl' nahi mila")
 
 
+def test_invalid_pk_fk_join_is_blocked():
+    output = execute_hinglish(
+        "students aur marks ko students.age = marks.score par inner join karke dikha"
+    )
+    assert_contains(output, "Join blocked: valid PK-FK relationship required")
+
+
+def test_three_table_join():
+    output = execute_hinglish(
+        "students aur enrollments aur courses ko students.id = enrollments.student_id aur enrollments.course_id = courses.course_id par inner join karke dikha"
+    )
+    assert_contains(output, ">> 3-TABLE INNER JOIN: students.id = enrollments.student_id AND enrollments.course_id = courses.course_id")
+    assert_contains(output, "Total result rows: 10")
+
+
 def test_dynamic_width_keeps_long_values_separated():
     output = execute_hinglish(
         "students aur marks ko students.id = marks.student_id par inner join karke dikha"
@@ -99,6 +114,8 @@ def main():
             test_left_join,
             test_join_aggregation,
             test_invalid_table_error,
+            test_invalid_pk_fk_join_is_blocked,
+            test_three_table_join,
             test_dynamic_width_keeps_long_values_separated,
         ]
         for test in tests:

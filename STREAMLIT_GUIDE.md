@@ -18,6 +18,7 @@ g++ -std=c++17 -o HinglishJoinEngine.exe main.cpp parser.cpp engine.cpp table.cp
 
 ```bash
 streamlit run streamlit_ui.py
+python -m streamlit run streamlit_ui.py
 ```
 
 The app will open at `http://localhost:8501`
