@@ -21,6 +21,11 @@
  *          If A[colA] == B[colB] → output merged row; matched = true
  *        If !matched → output A row + NULL for all B columns
  *
+ *    CROSS JOIN — O(n*m) Cartesian product:
+ *      For each row in A:
+ *        For each row in B:
+ *          Output merged row: [all A columns] + [all B columns]
+ *
  *  Schema Validation (before any join):
  *    1. Both tables must exist and load successfully
  *    2. Both specified columns must exist in their tables
@@ -62,6 +67,11 @@ void Engine::execute(const ParsedCommand& cmd) {
                      cmd.aggTable, cmd.aggColumn, cmd.aggFunc);
             break;
 
+        case CMD_CROSS_JOIN:
+            crossJoin(cmd.leftTable, cmd.rightTable,
+                      cmd.aggTable, cmd.aggColumn, cmd.aggFunc);
+            break;
+
         case CMD_INNER_JOIN_3:
             threeTableJoin(cmd.leftTable, cmd.rightTable, cmd.thirdTable,
                            cmd.leftColumn, cmd.rightColumn,
@@ -78,6 +88,10 @@ void Engine::execute(const ParsedCommand& cmd) {
                            cmd.aggTable, cmd.aggColumn, cmd.aggFunc);
             break;
 
+        case CMD_AGGREGATE:
+            aggregate(cmd.aggTable, cmd.aggColumn, cmd.aggFunc);
+            break;
+
         case CMD_EXIT:
             // Handled in main.cpp
             break;
@@ -87,7 +101,9 @@ void Engine::execute(const ParsedCommand& cmd) {
             cout << "\nSupported commands:" << endl;
             cout << "  INNER JOIN: <t1> aur <t2> ko <t1>.<col1> = <t2>.<col2> par inner join karke dikha" << endl;
             cout << "  LEFT JOIN : <t1> aur <t2> ko <t1>.<col1> = <t2>.<col2> par left join karke dikha" << endl;
+            cout << "  CROSS JOIN: <t1> aur <t2> ko cross join karke dikha" << endl;
             cout << "  AGG. JOIN : ... join karke <table>.<column> ka <sum|avg|count|min|max> nikal kar dikha" << endl;
+            cout << "  AGGREGATE : <table> me <column> ka <sum|avg|count|min|max> nikal kar dikha" << endl;
             cout << "  EXIT      : band karo" << endl;
             break;
     }
@@ -97,7 +113,7 @@ void Engine::threeTableJoin(const string& tableA, const string& tableB, const st
                             const string& colA, const string& colB,
                             const string& secondTableName, const string& secondCol, const string& colC,
                             bool leftJoinMode,
-                            const string& /*aggTable*/, const string& /*aggCol*/,
+                            const string& aggTable, const string& aggCol,
                             AggregationFunction aggFunc) {
     Table tA, tB, tC;
     if (!loadTable(tableA, tA)) {
@@ -206,7 +222,7 @@ void Engine::threeTableJoin(const string& tableA, const string& tableB, const st
                          tables, resultRows);
 
     if (aggFunc != AGG_NONE) {
-        cout << "  [Info] 3-table join aggregation abhi supported nahi hai." << endl;
+        processThreeTableAggregation(resultRows, tables, aggTable, aggCol, aggFunc);
     }
     cout << endl;
 }
@@ -385,6 +401,64 @@ void Engine::leftJoin(const string& tableA, const string& tableB,
 }
 
 // ============================================================
+//  CROSS JOIN
+// ============================================================
+//  Algorithm (Cartesian Product):
+//    For each row rA in tableA:
+//      For each row rB in tableB:
+//        Output merged row: [all A columns] + [all B columns]
+//
+//  No join condition — every row in A is paired with every row in B.
+//  Time complexity: O(|A| * |B|)
+// ============================================================
+void Engine::crossJoin(const string& tableA, const string& tableB,
+                       const string& aggTable, const string& aggCol,
+                       AggregationFunction aggFunc) {
+    Table tA, tB;
+    if (!loadTable(tableA, tA)) {
+        cerr << "[Error] Table '" << tableA << "' load nahi ho saka!" << endl;
+        return;
+    }
+    if (!loadTable(tableB, tB)) {
+        cerr << "[Error] Table '" << tableB << "' load nahi ho saka!" << endl;
+        return;
+    }
+
+    cout << "\n[Info] Loading schemas..." << endl;
+    tA.printSchema();
+    tB.printSchema();
+
+    cout << "\n>> CROSS JOIN: " << tableA << " x " << tableB << endl;
+
+    vector<vector<string>> resultRows;
+    int totalRows = 0;
+
+    for (const auto& rowA : tA.rows) {
+        for (const auto& rowB : tB.rows) {
+            vector<string> merged;
+            merged.insert(merged.end(), rowA.begin(), rowA.end());
+            merged.insert(merged.end(), rowB.begin(), rowB.end());
+            resultRows.push_back(merged);
+            totalRows++;
+        }
+    }
+
+    printJoinTable(tA, tB, resultRows);
+    cout << "\n  Total result rows: " << totalRows << endl;
+
+    // Save results to output files (CSV + TXT)
+    string csvName = "output_cross_join_" + tableA + "_" + tableB + ".csv";
+    string txtName = "output_cross_join_" + tableA + "_" + tableB + ".txt";
+    saveJoinOutput(csvName, tA, tB, "", "", "CROSS JOIN", resultRows);
+    saveTextOutput(txtName, tA, tB, "", "", "CROSS JOIN", resultRows);
+
+    if (aggFunc != AGG_NONE) {
+        processJoinAggregation(resultRows, tA, tB, aggTable, aggCol, aggFunc);
+    }
+    cout << endl;
+}
+
+// ============================================================
 //  processJoinAggregation - Run aggregation on joined rows
 // ============================================================
 void Engine::processJoinAggregation(const vector<vector<string>>& resultRows,
@@ -473,6 +547,98 @@ void Engine::processJoinAggregation(const vector<vector<string>>& resultRows,
 
     string txtName = "output_join_agg_" + funcStr + "_" + aggCol + ".txt";
     string joinDesc = tA.name + "_" + tB.name;
+    saveAggregateOutput(txtName, "JOIN(" + joinDesc + ")", actualTable + aggCol, funcStr, result);
+}
+
+// ============================================================
+//  processThreeTableAggregation - Run aggregation on 3-table join rows
+// ============================================================
+void Engine::processThreeTableAggregation(const vector<vector<string>>& resultRows,
+                                          const vector<Table>& tables,
+                                          const string& aggTable, const string& aggCol,
+                                          AggregationFunction aggFunc) {
+    int aggIdx = -1;
+    bool isInt = false;
+
+    // Search across all three table schemas (concatenated in order)
+    int offset = 0;
+    for (const auto& table : tables) {
+        if (aggTable == table.name || aggTable == "") {
+            for (size_t i = 0; i < table.schema.size(); i++) {
+                if (table.schema[i].name == aggCol) {
+                    aggIdx = offset + (int)i;
+                    isInt = (table.schema[i].type == "INT");
+                    break;
+                }
+            }
+        }
+        if (aggIdx != -1) break;
+        offset += (int)table.schema.size();
+    }
+
+    if (aggIdx == -1) {
+        cerr << "\n[Error] Aggregation column '" << aggCol << "' 3-table join output mein nahi mila!" << endl;
+        return;
+    }
+
+    if (!isInt && aggFunc != AGG_COUNT) {
+        cerr << "\n[Error] Aggregation sirf INT columns par kaam karta hai (except COUNT)!" << endl;
+        return;
+    }
+
+    string funcStr = "";
+    double result = 0;
+    int count = 0;
+    long long sum = 0;
+    long long minVal = 0;
+    long long maxVal = 0;
+    bool first = true;
+
+    for (const auto& row : resultRows) {
+        if (row.size() <= (size_t)aggIdx) continue;
+        string valStr = row[aggIdx];
+        if (valStr == "NULL" || valStr.empty()) continue;
+
+        count++;
+        if (isInt) {
+            long long val = -1;
+            try { val = stoll(valStr); } catch(...) { continue; }
+            sum += val;
+            if (first) {
+                minVal = val;
+                maxVal = val;
+                first = false;
+            } else {
+                if (val < minVal) minVal = val;
+                if (val > maxVal) maxVal = val;
+            }
+        }
+    }
+
+    switch (aggFunc) {
+        case AGG_SUM: funcStr = "SUM"; result = sum; break;
+        case AGG_AVG: funcStr = "AVG"; result = count > 0 ? (double)sum / count : 0; break;
+        case AGG_COUNT: funcStr = "COUNT"; result = count; break;
+        case AGG_MIN: funcStr = "MIN"; result = minVal; break;
+        case AGG_MAX: funcStr = "MAX"; result = maxVal; break;
+        default: return;
+    }
+
+    string actualTable = (aggTable.empty() ? "" : aggTable + ".");
+    // Build join description from all tables
+    string joinDesc = tables[0].name;
+    for (size_t i = 1; i < tables.size(); i++) {
+        joinDesc += "_" + tables[i].name;
+    }
+
+    cout << "\n>> AGGREGATE ON 3-TABLE JOIN: " << funcStr << " of " << actualTable << aggCol << endl;
+    cout << endl;
+    cout << "  +----------------------+----------------------+" << endl;
+    cout << "  | " << left << setw(20) << (funcStr + "(" + aggCol + ")") << " | " << left << setw(20) << result << " |" << endl;
+    cout << "  +----------------------+----------------------+" << endl;
+    cout << endl;
+
+    string txtName = "output_join_3_agg_" + funcStr + "_" + aggCol + ".txt";
     saveAggregateOutput(txtName, "JOIN(" + joinDesc + ")", actualTable + aggCol, funcStr, result);
 }
 

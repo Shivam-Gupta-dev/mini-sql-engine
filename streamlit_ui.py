@@ -147,8 +147,16 @@ def build_hinglish_command(table1, col1, table2, col2, join_type,
                            use_third=False, table3="", col2_second="", col3="",
                            use_agg=False, agg_table="", agg_col="", agg_func=""):
     """Build a Hinglish command from parameters"""
-    join_keyword = "inner join" if join_type == "INNER" else "left join"
-    if use_third:
+    join_keywords = {
+        "INNER": "inner join",
+        "LEFT": "left join",
+        "CROSS": "cross join",
+    }
+    join_keyword = join_keywords.get(join_type, "inner join")
+    if join_type == "CROSS":
+        # Cross join has no condition
+        command = f"{table1} aur {table2} ko cross join karke"
+    elif use_third:
         command = (
             f"{table1} aur {table2} aur {table3} ko "
             f"{table1}.{col1} = {table2}.{col2} aur "
@@ -232,7 +240,7 @@ def parse_aggregation_result(output):
     lines = output.split('\n')
     agg_start = -1
     for i, line in enumerate(lines):
-        if '>> AGGREGATE ON JOIN:' in line:
+        if '>> AGGREGATE ON JOIN:' in line or '>> AGGREGATE:' in line:
             agg_start = i
             break
             
@@ -272,6 +280,37 @@ with st.sidebar:
         st.error("No tables found in ./data/ folder")
     else:
         table_names = list(tables.keys())
+
+        st.subheader("Single Table Aggregation")
+        agg_single_cols = st.columns(3)
+        with agg_single_cols[0]:
+            single_agg_table = st.selectbox("Table", table_names, key="single_agg_table")
+        with agg_single_cols[1]:
+            single_agg_columns = list(tables.get(single_agg_table, {}).keys())
+            single_agg_col = st.selectbox("Column", single_agg_columns, key="single_agg_col")
+        with agg_single_cols[2]:
+            single_agg_func = st.selectbox("Function", ["SUM", "AVG", "COUNT", "MIN", "MAX"], key="single_agg_func")
+
+        single_agg_command = (
+            f"{single_agg_table} me {single_agg_col} ka "
+            f"{single_agg_func.lower()} nikal kar dikha"
+        )
+        st.code(single_agg_command, language="text")
+
+        if st.button("Execute Aggregation", use_container_width=True):
+            with st.spinner("Executing aggregation..."):
+                stdout, stderr = execute_command(single_agg_command)
+
+                if stderr and "Error" in stderr:
+                    st.error(f"Execution Error:\n{stderr}")
+                else:
+                    st.session_state.last_output = stdout
+                    st.session_state.last_command = single_agg_command
+                    st.session_state.last_query_mode = "AGGREGATION"
+                    st.success("Aggregation executed successfully!")
+
+        st.divider()
+        st.subheader("Join Query")
 
         # Table Selection
         col1, col2 = st.columns(2)
@@ -325,25 +364,23 @@ with st.sidebar:
                 col3_selected = selected_third_join["right_col"]
 
         # Join Type Selection
-        join_type = st.radio("Join Type", ["INNER", "LEFT"], horizontal=True)
+        join_type_options = ["INNER", "LEFT"] if use_third else ["INNER", "LEFT", "CROSS"]
+        join_type = st.radio("Join Type", join_type_options, horizontal=True)
 
         st.divider()
         
         use_agg = st.checkbox(
             "Add Aggregation",
-            disabled=use_third,
-            help="Aggregation is supported only for two-table joins."
+            help="Apply an aggregation function on the joined result."
         )
         agg_table = ""
         agg_col = ""
         agg_func = ""
-        if use_third:
-            st.info("Aggregation is disabled for 3-table joins.")
-        use_agg = use_agg and not use_third
         if use_agg:
             col_a_t, col_a_c, col_a_f = st.columns(3)
             with col_a_t:
-                agg_table = st.selectbox("Agg Table", [table1, table2], key="agg_table")
+                agg_table_options = [table1, table2, table3] if use_third and table3 else [table1, table2]
+                agg_table = st.selectbox("Agg Table", agg_table_options, key="agg_table")
             with col_a_c:
                 agg_cols = list(tables.get(agg_table, {}).keys())
                 agg_col = st.selectbox("Agg Column", agg_cols, key="agg_col")
@@ -361,7 +398,10 @@ with st.sidebar:
         st.code(hinglish_cmd, language="text")
 
         # Execute Button
-        can_execute = bool(col1_selected and col2_selected and (not use_third or (table3 and col2_second and col3_selected)))
+        if join_type == "CROSS":
+            can_execute = True
+        else:
+            can_execute = bool(col1_selected and col2_selected and (not use_third or (table3 and col2_second and col3_selected)))
         if st.button("Execute Query", use_container_width=True, type="primary", disabled=not can_execute):
             with st.spinner("Executing query..."):
                 stdout, stderr = execute_command(hinglish_cmd)
@@ -375,6 +415,7 @@ with st.sidebar:
                     st.session_state.last_table1 = table1
                     st.session_state.last_table2 = table2
                     st.session_state.last_table3 = table3 if use_third else ""
+                    st.session_state.last_query_mode = "JOIN"
                     st.success("Query executed successfully!")
 
 # ============================================================================
@@ -390,34 +431,41 @@ else:
     with tab1:
         st.subheader("Query Results")
 
-        # Try to load nice DataFrame from CSV first
-        df = load_csv_output(
-            st.session_state.last_join_type,
-            st.session_state.last_table1,
-            st.session_state.last_table2,
-            st.session_state.get("last_table3", "")
-        )
-
-        if df is not None:
-            st.dataframe(df, use_container_width=True)
-            st.info(f"{len(df)} rows returned")
-
-            # Download CSV
-            csv = df.to_csv(index=False)
-            st.download_button(
-                label="Download as CSV",
-                data=csv,
-                file_name=f"join_result.csv",
-                mime="text/csv"
-            )
+        if st.session_state.get("last_query_mode") == "AGGREGATION":
+            agg_output = parse_aggregation_result(st.session_state.last_output)
+            if agg_output:
+                st.code(agg_output, language="text")
+            else:
+                st.warning("Could not parse aggregation output")
         else:
-            st.warning("Could not parse tabular output")
+            # Try to load nice DataFrame from CSV first
+            df = load_csv_output(
+                st.session_state.last_join_type,
+                st.session_state.last_table1,
+                st.session_state.last_table2,
+                st.session_state.get("last_table3", "")
+            )
 
-        agg_output = parse_aggregation_result(st.session_state.last_output)
-        if agg_output:
-            st.divider()
-            st.subheader("Aggregation Result")
-            st.code(agg_output, language="text")
+            if df is not None:
+                st.dataframe(df, use_container_width=True)
+                st.info(f"{len(df)} rows returned")
+
+                # Download CSV
+                csv = df.to_csv(index=False)
+                st.download_button(
+                    label="Download as CSV",
+                    data=csv,
+                    file_name=f"join_result.csv",
+                    mime="text/csv"
+                )
+            else:
+                st.warning("Could not parse tabular output")
+
+            agg_output = parse_aggregation_result(st.session_state.last_output)
+            if agg_output:
+                st.divider()
+                st.subheader("Aggregation Result")
+                st.code(agg_output, language="text")
 
     with tab2:
         st.subheader("Executed Hinglish Command")
@@ -425,7 +473,9 @@ else:
         st.markdown("""
         **Command Syntax:**
         ```
+        <table> me <column> ka <sum|avg|count|min|max> nikal kar dikha
         <table1> aur <table2> ko <table1>.<column1> = <table2>.<column2> par <inner|left> join karke [<table>.<column> ka <func> nikal kar] dikha
+        <table1> aur <table2> ko cross join karke dikha
         <table1> aur <table2> aur <table3> ko <table1>.<pk> = <table2>.<fk> aur <table2>.<fk> = <table3>.<pk> par <inner|left> join karke dikha
         ```
 
@@ -453,7 +503,8 @@ with st.expander("About HinglishDB"):
         ### Features
         - **Hinglish Support**: Commands in Hindi-English mix
         - **Schema Validation**: Automatic FK/PK checking
-        - **Multiple Join Types**: INNER and LEFT joins
+        - **Multiple Join Types**: INNER, LEFT, and CROSS joins
+        - **Aggregation**: SUM, AVG, COUNT, MIN, and MAX
         - **File-Based**: Pure C++ with fstream, no external DB
         - **Output Formats**: Terminal, CSV, and formatted TXT
         """)
@@ -473,6 +524,18 @@ with st.expander("Example Commands"):
     students aur marks ko students.id = marks.student_id par inner join karke dikha
     ```
     Shows all students who have marks.
+
+    **Single Table Aggregation Example:**
+    ```
+    marks me score ka avg nikal kar dikha
+    ```
+    Calculates an aggregate directly from one table.
+
+    **CROSS JOIN Example:**
+    ```
+    students aur courses ko cross join karke dikha
+    ```
+    Shows the Cartesian product — every student paired with every course.
 
     **LEFT JOIN with Aggregation Example:**
     ```

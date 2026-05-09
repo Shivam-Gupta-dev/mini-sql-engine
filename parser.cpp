@@ -11,8 +11,10 @@
  *  Command patterns are matched by looking for specific
  *  Hindi/Hinglish keywords in the input string.
  *
- *  Expected command format:
+ *  Expected command formats:
  *    <t1> aur <t2> ko <t1>.<col1> = <t2>.<col2> par <inner|left> join karke dikha
+ *    <t1> aur <t2> ko cross join karke dikha
+ *    <table> me <column> ka <sum|avg|count|min|max> nikal kar dikha
  *
  *  Parsing steps:
  *    1. Convert entire input to lowercase
@@ -20,9 +22,9 @@
  *    3. Look for "aur" to identify the two table names
  *    4. Look for "par" to locate the join condition
  *    5. Parse "table.column = table.column" between "ko" and "par"
- *    6. Detect join type: "inner join" or "left join"
- *    4. Detect aggregation: <table> me <column> ka <func> nikal kar dikha
- *    5. Validate that "karke dikha" or "nikal kar dikha" is present
+ *    6. Detect join type: inner, left, or cross
+ *    7. Detect aggregation: <table> me <column> ka <func> nikal kar dikha
+ *    8. Validate that "karke dikha" or "nikal kar dikha" is present
  */
 
 #include "parser.h"
@@ -108,12 +110,60 @@ ParsedCommand Parser::parse(const string& input) {
     }
 
     // ============================================================
-    // COMMAND: JOIN — "<t1> aur <t2> ko <cond> par <type> join karke [agg] dikha"
+    // COMMAND: SINGLE TABLE AGGREGATION
+    // "<table> me <column> ka <sum|avg|count|min|max> nikal kar dikha"
+    // Also accepts "mein" in place of "me".
     // ============================================================
-    // Step 1: Must contain "aur", "ko", "par", "join", "karke", "dikha"
+    vector<string> tokens = tokenize(lower);
+    auto parseAggFunc = [](const string& funcToken) {
+        if (funcToken == "sum") return AGG_SUM;
+        if (funcToken == "avg") return AGG_AVG;
+        if (funcToken == "count") return AGG_COUNT;
+        if (funcToken == "min") return AGG_MIN;
+        if (funcToken == "max") return AGG_MAX;
+        return AGG_NONE;
+    };
+
+    if (lower.find("join") == string::npos &&
+        lower.find("nikal") != string::npos &&
+        lower.find("dikha") != string::npos) {
+        int mePos = -1, kaPos = -1;
+        for (int i = 0; i < (int)tokens.size(); i++) {
+            if ((tokens[i] == "me" || tokens[i] == "mein") && mePos == -1) {
+                mePos = i;
+            } else if (tokens[i] == "ka") {
+                kaPos = i;
+            }
+        }
+
+        if (mePos > 0 && kaPos > mePos + 1 && kaPos + 1 < (int)tokens.size()) {
+            cmd.aggTable = tokens[mePos - 1];
+            cmd.aggColumn = tokens[mePos + 1];
+            cmd.aggFunc = parseAggFunc(tokens[kaPos + 1]);
+
+            if (cmd.aggFunc == AGG_NONE) {
+                cerr << "[Error] Unknown aggregation function: '" << tokens[kaPos + 1]
+                     << "'. Use sum, avg, count, min, or max." << endl;
+                return cmd;
+            }
+
+            cmd.type = CMD_AGGREGATE;
+            return cmd;
+        }
+
+        cerr << "[Error] Aggregation syntax galat hai!" << endl;
+        cerr << "Expected format:" << endl;
+        cerr << "  <table> me <column> ka <sum|avg|count|min|max> nikal kar dikha" << endl;
+        return cmd;
+    }
+
+    // ============================================================
+    // COMMAND: JOIN — "<t1> aur <t2> ko <cond> par <type> join karke [agg] dikha"
+    //                 "<t1> aur <t2> ko cross join karke dikha"
+    // ============================================================
+    // Step 1: Must contain "aur", "ko", "join", "karke", "dikha"
     if (lower.find("aur") == string::npos ||
         lower.find("ko") == string::npos ||
-        lower.find("par") == string::npos ||
         lower.find("join") == string::npos ||
         lower.find("karke") == string::npos ||
         lower.find("dikha") == string::npos) {
@@ -121,12 +171,65 @@ ParsedCommand Parser::parse(const string& input) {
         cerr << "Expected format:" << endl;
         cerr << "  <t1> aur <t2> ko <t1>.<col1> = <t2>.<col2> par inner join karke dikha" << endl;
         cerr << "  <t1> aur <t2> ko <t1>.<col1> = <t2>.<col2> par left join karke dikha" << endl;
+        cerr << "  <t1> aur <t2> ko cross join karke dikha" << endl;
+        return cmd;
+    }
+
+    // ============================================================
+    // CROSS JOIN — "<t1> aur <t2> ko cross join karke dikha"
+    // No join condition needed, just Cartesian product.
+    // ============================================================
+    if (lower.find("cross") != string::npos && lower.find("join") != string::npos) {
+        int aurPos = -1, koPos = -1;
+        for (int i = 0; i < (int)tokens.size(); i++) {
+            if (tokens[i] == "aur" && aurPos == -1) aurPos = i;
+            else if (tokens[i] == "ko" && koPos == -1) koPos = i;
+        }
+
+        if (aurPos < 1 || koPos < 0) {
+            cerr << "[Error] Cross join syntax galat hai!" << endl;
+            cerr << "Expected: <t1> aur <t2> ko cross join karke dikha" << endl;
+            return cmd;
+        }
+
+        cmd.leftTable = tokens[aurPos - 1];
+        cmd.rightTable = tokens[aurPos + 1];
+        cmd.type = CMD_CROSS_JOIN;
+
+        // Check for optional aggregation after "karke"
+        int karkePos = -1;
+        for (int i = 0; i < (int)tokens.size(); i++) {
+            if (tokens[i] == "karke") karkePos = i;
+        }
+        if (karkePos > 0) {
+            int kaPos2 = -1;
+            for (int i = karkePos; i < (int)tokens.size(); i++) {
+                if (tokens[i] == "ka") kaPos2 = i;
+            }
+            if (kaPos2 > karkePos + 1 && kaPos2 + 1 < (int)tokens.size()) {
+                string aggColToken = tokens[kaPos2 - 1];
+                string funcToken = tokens[kaPos2 + 1];
+                size_t dotPos = aggColToken.find('.');
+                if (dotPos != string::npos) {
+                    cmd.aggTable = aggColToken.substr(0, dotPos);
+                    cmd.aggColumn = aggColToken.substr(dotPos + 1);
+                } else {
+                    cmd.aggTable = "";
+                    cmd.aggColumn = aggColToken;
+                }
+                cmd.aggFunc = parseAggFunc(funcToken);
+                if (cmd.aggFunc == AGG_NONE) {
+                    cerr << "[Error] Unknown aggregation function: '" << funcToken << "'. Use sum, avg, count, min, or max." << endl;
+                    cmd.type = CMD_UNKNOWN;
+                    return cmd;
+                }
+            }
+        }
+
         return cmd;
     }
 
     // Step 2: Tokenize the lowercase input
-    vector<string> tokens = tokenize(lower);
-
     // Step 3: Find positions of key tokens
     int aurPos = -1, secondAurPos = -1, koPos = -1, parPos = -1;
     int joinPos = -1;
@@ -313,7 +416,8 @@ ParsedCommand Parser::parse(const string& input) {
             // If "par" is right before "join", default to INNER JOIN
             cmd.type = isThreeTableJoin ? CMD_INNER_JOIN_3 : CMD_INNER_JOIN;
         } else {
-            cerr << "[Error] Unknown join type: '" << joinModifier << "'. Use 'inner' or 'left'." << endl;
+            cerr << "[Error] Unknown join type: '" << joinModifier
+                 << "'. Use 'inner', 'left', or 'cross'." << endl;
             return cmd;
         }
     }
@@ -337,12 +441,8 @@ ParsedCommand Parser::parse(const string& input) {
             cmd.aggColumn = aggColToken;
         }
 
-        if (funcToken == "sum") cmd.aggFunc = AGG_SUM;
-        else if (funcToken == "avg") cmd.aggFunc = AGG_AVG;
-        else if (funcToken == "count") cmd.aggFunc = AGG_COUNT;
-        else if (funcToken == "min") cmd.aggFunc = AGG_MIN;
-        else if (funcToken == "max") cmd.aggFunc = AGG_MAX;
-        else {
+        cmd.aggFunc = parseAggFunc(funcToken);
+        if (cmd.aggFunc == AGG_NONE) {
              cerr << "[Error] Unknown aggregation function: '" << funcToken << "'. Use sum, avg, count, min, or max." << endl;
              cmd.type = CMD_UNKNOWN;
              return cmd;

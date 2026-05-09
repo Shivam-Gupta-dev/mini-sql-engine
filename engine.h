@@ -11,6 +11,7 @@
  *  Supported operations:
  *    - INNER JOIN (nested-loop)
  *    - LEFT JOIN  (nested-loop with NULL padding)
+ *    - CROSS JOIN (Cartesian product of two tables)
  *    - AGGREGATION (sum, avg, count, min, max on a single column)
  *
  *  Schema validation is performed before every join:
@@ -50,6 +51,10 @@ public:
                   const string &colA, const string &colB,
                   const string &aggTable, const string &aggCol, AggregationFunction aggFunc);
 
+    // CROSS JOIN: Cartesian product of two tables (no join condition).
+    void crossJoin(const string &tableA, const string &tableB,
+                   const string &aggTable, const string &aggCol, AggregationFunction aggFunc);
+
     void threeTableJoin(const string &tableA, const string &tableB, const string &tableC,
                         const string &colA, const string &colB,
                         const string &secondTable, const string &secondCol, const string &colC,
@@ -63,11 +68,17 @@ private:
     // Cache of loaded tables to avoid re-reading files
     map<string, Table> tableCache;
 
-    // Process aggregation on joined rows
+    // Process aggregation on joined rows (2-table)
     void processJoinAggregation(const vector<vector<string>> &resultRows,
                                 const Table &tA, const Table &tB,
                                 const string &aggTable, const string &aggCol,
                                 AggregationFunction aggFunc);
+
+    // Process aggregation on joined rows (3-table)
+    void processThreeTableAggregation(const vector<vector<string>> &resultRows,
+                                      const vector<Table> &tables,
+                                      const string &aggTable, const string &aggCol,
+                                      AggregationFunction aggFunc);
 
     // Load a table (from cache or from file). Returns true on success.
     bool loadTable(const string &tableName, Table &table);

@@ -15,7 +15,7 @@
  *    User Input → Parser → ParsedCommand → Engine → Table I/O → Output
  *
  *  This engine is READ-ONLY. It performs only INNER JOIN,
- *  LEFT JOIN, and AGGREGATION on pre-existing .tbl files in the data/ folder.
+ *  LEFT JOIN, CROSS JOIN, and AGGREGATION on pre-existing .tbl files in the data/ folder.
  *  No create/insert/update/delete operations are supported.
  */
 
@@ -100,21 +100,29 @@ void showHelp() {
     cout << "     Syntax : <t1> aur <t2> ko <t1>.<col1> = <t2>.<col2> par join karke dikha" << endl;
     cout << "     Example: students aur marks ko students.id = marks.student_id par join karke dikha" << endl;
     cout << endl;
-    cout << "  4. AGGREGATION ON JOIN:" << endl;
+    cout << "  4. CROSS JOIN:" << endl;
+    cout << "     Syntax : <t1> aur <t2> ko cross join karke dikha" << endl;
+    cout << "     Example: students aur courses ko cross join karke dikha" << endl;
+    cout << endl;
+    cout << "  5. AGGREGATION ON JOIN:" << endl;
     cout << "     Syntax : <t1> aur <t2> ko <t1>.<col1> = <t2>.<col2> par <inner|left> join karke <table>.<col> ka <func> nikal kar dikha" << endl;
     cout << "     Syntax : <t1> aur <t2> ko <t1>.<col1> = <t2>.<col2> par <inner|left> join karke <col> ka <func> nikal kar dikha" << endl;
     cout << "     Functions: sum, avg, count, min, max" << endl;
     cout << "     Example : students aur marks ko students.id = marks.student_id par inner join karke marks.score ka sum nikal kar dikha" << endl;
     cout << "     Example : students aur marks ko students.id = marks.student_id par left join karke score ka avg nikal kar dikha" << endl;
     cout << endl;
-    cout << "  5. THREE TABLE JOIN:" << endl;
+    cout << "  6. SINGLE TABLE AGGREGATION:" << endl;
+    cout << "     Syntax : <table> me <column> ka <sum|avg|count|min|max> nikal kar dikha" << endl;
+    cout << "     Example: marks me score ka avg nikal kar dikha" << endl;
+    cout << endl;
+    cout << "  7. THREE TABLE JOIN:" << endl;
     cout << "     Syntax : <t1> aur <t2> aur <t3> ko <t1>.<pk> = <t2>.<fk> aur <t2>.<fk> = <t3>.<pk> par <inner|left> join karke dikha" << endl;
     cout << "     Example: students aur enrollments aur courses ko students.id = enrollments.student_id aur enrollments.course_id = courses.course_id par inner join karke dikha" << endl;
     cout << endl;
-    cout << "  6. EXIT:" << endl;
+    cout << "  8. EXIT:" << endl;
     cout << "     band karo" << endl;
     cout << endl;
-    cout << "  7. HELP:" << endl;
+    cout << "  9. HELP:" << endl;
     cout << "     madad" << endl;
     cout << endl;
 }

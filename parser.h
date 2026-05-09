@@ -16,6 +16,12 @@
  *    LEFT JOIN:
  *      <t1> aur <t2> ko <t1>.<col1> = <t2>.<col2> par left join karke dikha
  *
+ *    CROSS JOIN:
+ *      <t1> aur <t2> ko cross join karke dikha
+ *
+ *    SINGLE TABLE AGGREGATION:
+ *      <table> me <column> ka <sum|avg|count|min|max> nikal kar dikha
+ *
  *    EXIT:
  *      band karo
  *
@@ -34,8 +40,10 @@ using namespace std;
 enum CommandType {
     CMD_INNER_JOIN,     // INNER JOIN between two tables
     CMD_LEFT_JOIN,      // LEFT JOIN between two tables
+    CMD_CROSS_JOIN,     // CROSS JOIN between two tables
     CMD_INNER_JOIN_3,   // INNER JOIN across three tables
     CMD_LEFT_JOIN_3,    // LEFT JOIN across three tables
+    CMD_AGGREGATE,      // Aggregation on a single table
     CMD_EXIT,           // Exit the program
     CMD_UNKNOWN         // Unrecognized command
 };

@@ -77,6 +77,30 @@ def test_join_aggregation():
     assert_contains(output, "84.2")
 
 
+def test_single_table_aggregation():
+    output = execute_hinglish("marks me score ka avg nikal kar dikha")
+    assert_contains(output, ">> AGGREGATE: AVG of marks.score")
+    assert_contains(output, "84.2")
+
+
+def test_right_join():
+    output = execute_hinglish(
+        "courses aur departments ko courses.dept_id = departments.dept_id par right join karke dikha"
+    )
+    assert_contains(output, ">> RIGHT JOIN: courses.dept_id = departments.dept_id")
+    assert_contains(output, "Total result rows: 12")
+    assert_contains(output, "Biotechnology")
+
+
+def test_full_outer_join():
+    output = execute_hinglish(
+        "courses aur departments ko courses.dept_id = departments.dept_id par full outer join karke dikha"
+    )
+    assert_contains(output, ">> FULL OUTER JOIN: courses.dept_id = departments.dept_id")
+    assert_contains(output, "Total result rows: 12")
+    assert_contains(output, "NULL")
+
+
 def test_invalid_table_error():
     output = execute_hinglish(
         "missing aur marks ko missing.id = marks.student_id par inner join karke dikha"
@@ -113,6 +137,9 @@ def main():
             test_inner_join,
             test_left_join,
             test_join_aggregation,
+            test_single_table_aggregation,
+            test_right_join,
+            test_full_outer_join,
             test_invalid_table_error,
             test_invalid_pk_fk_join_is_blocked,
             test_three_table_join,
