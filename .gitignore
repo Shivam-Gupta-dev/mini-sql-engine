@@ -1,4 +1,16 @@
+# Compiled binaries
+*.exe
+
+# Generated output files
 /data/*.csv
 /data/*.txt
+
+# IDE / Editor
 .vscode
+
+# Python
 __pycache__
+*.pyc
+
+
+QIR_DB_PLAN.txt

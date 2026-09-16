@@ -1,18 +1,23 @@
 /*
  * ==========================================================
- *  Hinglish Schema-Aware Join Engine
+ *  QIR-DB: Query Intermediate Representation Compiler
  *  engine.h - Engine class declaration
  * ==========================================================
  *
  *  The Engine class is the core execution layer.
  *  It receives parsed commands and performs JOIN operations
  *  on pre-existing tables loaded from the data/ folder.
+ *  It also generates equivalent SQL for multiple database
+ *  dialects via the CodeGenerator backends.
  *
  *  Supported operations:
  *    - INNER JOIN (nested-loop)
  *    - LEFT JOIN  (nested-loop with NULL padding)
  *    - CROSS JOIN (Cartesian product of two tables)
  *    - AGGREGATION (sum, avg, count, min, max on a single column)
+ *
+ *  Supported code generation targets:
+ *    - MySQL, PostgreSQL, SQLite, MongoDB
  *
  *  Schema validation is performed before every join:
  *    - Both tables must exist
@@ -29,6 +34,7 @@
 #include <fstream>
 #include "table.h"
 #include "parser.h"
+#include "codegen.h"
 
 using namespace std;
 
@@ -123,6 +129,15 @@ private:
                       const Table &tB, const vector<string> &rowB);
     void printLeftNullRow(const Table &tA, const vector<string> &rowA,
                           const Table &tB);
+
+    // ---- QIR-DB: Multi-Database Code Generation ----
+
+    // Generate and display SQL for all supported dialects
+    void generateAllSQL(const ParsedCommand &cmd);
+
+    // Save generated SQL queries to an output file
+    void saveGeneratedSQL(const string &fileName,
+                          const vector<pair<string, string>> &queries);
 };
 
 #endif // ENGINE_H

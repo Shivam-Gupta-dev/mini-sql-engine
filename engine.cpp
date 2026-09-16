@@ -1,12 +1,13 @@
 /*
  * ==========================================================
- *  Hinglish Schema-Aware Join Engine
+ *  QIR-DB: Query Intermediate Representation Compiler
  *  engine.cpp - Engine class implementation
  * ==========================================================
  *
  *  The Engine executes JOIN operations on pre-existing tables.
  *  It loads tables from data/ .tbl files, validates schema,
- *  and performs nested-loop joins.
+ *  performs nested-loop joins, and generates equivalent SQL
+ *  for MySQL, PostgreSQL, SQLite, and MongoDB.
  *
  *  Join Algorithms:
  *    INNER JOIN — O(n*m) nested loop:
@@ -39,6 +40,7 @@
 #include <algorithm>
 #include <fstream>
 #include <ctime>
+#include <sstream>
 
 static ofstream openDataOutputFile(const string& fileName, string& filePath) {
     filePath = "data/" + fileName;
@@ -53,23 +55,26 @@ static ofstream openDataOutputFile(const string& fileName, string& filePath) {
 // ============================================================
 //  execute - Route a parsed command to the appropriate method
 // ============================================================
-void Engine::execute(const ParsedCommand& cmd) {  
-    switch (cmd.type) { 
+void Engine::execute(const ParsedCommand& cmd) {
+    switch (cmd.type) {
         case CMD_INNER_JOIN:
             innerJoin(cmd.leftTable, cmd.rightTable,
                       cmd.leftColumn, cmd.rightColumn,
                       cmd.aggTable, cmd.aggColumn, cmd.aggFunc);
+            generateAllSQL(cmd);
             break;
 
         case CMD_LEFT_JOIN:
             leftJoin(cmd.leftTable, cmd.rightTable,
                      cmd.leftColumn, cmd.rightColumn,
                      cmd.aggTable, cmd.aggColumn, cmd.aggFunc);
+            generateAllSQL(cmd);
             break;
 
         case CMD_CROSS_JOIN:
             crossJoin(cmd.leftTable, cmd.rightTable,
                       cmd.aggTable, cmd.aggColumn, cmd.aggFunc);
+            generateAllSQL(cmd);
             break;
 
         case CMD_INNER_JOIN_3:
@@ -78,6 +83,7 @@ void Engine::execute(const ParsedCommand& cmd) {
                            cmd.secondJoinTable, cmd.secondLeftColumn, cmd.thirdColumn,
                            false,
                            cmd.aggTable, cmd.aggColumn, cmd.aggFunc);
+            generateAllSQL(cmd);
             break;
 
         case CMD_LEFT_JOIN_3:
@@ -86,10 +92,12 @@ void Engine::execute(const ParsedCommand& cmd) {
                            cmd.secondJoinTable, cmd.secondLeftColumn, cmd.thirdColumn,
                            true,
                            cmd.aggTable, cmd.aggColumn, cmd.aggFunc);
+            generateAllSQL(cmd);
             break;
 
         case CMD_AGGREGATE:
             aggregate(cmd.aggTable, cmd.aggColumn, cmd.aggFunc);
+            generateAllSQL(cmd);
             break;
 
         case CMD_EXIT:
@@ -1119,4 +1127,106 @@ void Engine::printLeftNullRow(const Table& /*tA*/, const vector<string>& rowA,
         cout << " " << left << setw(colWidth) << "NULL" << "|";
     }
     cout << endl;
+}
+
+// ============================================================
+//  QIR-DB: Multi-Database Code Generation
+// ============================================================
+//  Generates equivalent queries for MySQL, PostgreSQL, SQLite,
+//  and MongoDB from the same ParsedCommand (QIR).
+//  Uses deterministic string templating — no LLM needed.
+// ============================================================
+
+void Engine::generateAllSQL(const ParsedCommand& cmd) {
+    // Skip code generation for non-query commands
+    if (cmd.type == CMD_EXIT || cmd.type == CMD_UNKNOWN) {
+        return;
+    }
+
+    // Instantiate all code generators
+    MySQLCodeGen mysqlGen;
+    PostgresCodeGen pgGen;
+    SQLiteCodeGen sqliteGen;
+    MongoCodeGen mongoGen;
+
+    // Generate queries for each dialect
+    vector<pair<string, string>> queries;
+    queries.push_back({mysqlGen.dialectName(), mysqlGen.generate(cmd)});
+    queries.push_back({pgGen.dialectName(), pgGen.generate(cmd)});
+    queries.push_back({sqliteGen.dialectName(), sqliteGen.generate(cmd)});
+    queries.push_back({mongoGen.dialectName(), mongoGen.generate(cmd)});
+
+    // Print to terminal
+    cout << endl;
+    cout << "  ==================== Generated SQL ====================" << endl;
+    for (const auto& [dialect, sql] : queries) {
+        if (!sql.empty()) {
+            cout << endl;
+            cout << "  [" << dialect << "]" << endl;
+            // Indent each line of the SQL
+            string line;
+            istringstream stream(sql);
+            while (getline(stream, line)) {
+                cout << "  " << line << endl;
+            }
+        }
+    }
+    cout << endl;
+    cout << "  ========================================================" << endl;
+
+    // Build filename based on command type
+    string prefix = "output_generated_sql_";
+    switch (cmd.type) {
+        case CMD_INNER_JOIN:
+            prefix += "inner_join_" + cmd.leftTable + "_" + cmd.rightTable;
+            break;
+        case CMD_LEFT_JOIN:
+            prefix += "left_join_" + cmd.leftTable + "_" + cmd.rightTable;
+            break;
+        case CMD_CROSS_JOIN:
+            prefix += "cross_join_" + cmd.leftTable + "_" + cmd.rightTable;
+            break;
+        case CMD_INNER_JOIN_3:
+            prefix += "inner_join_3_" + cmd.leftTable + "_" + cmd.rightTable + "_" + cmd.thirdTable;
+            break;
+        case CMD_LEFT_JOIN_3:
+            prefix += "left_join_3_" + cmd.leftTable + "_" + cmd.rightTable + "_" + cmd.thirdTable;
+            break;
+        case CMD_AGGREGATE:
+            prefix += "agg_" + cmd.aggTable + "_" + cmd.aggColumn;
+            break;
+        default:
+            prefix += "unknown";
+            break;
+    }
+    prefix += ".txt";
+
+    saveGeneratedSQL(prefix, queries);
+}
+
+void Engine::saveGeneratedSQL(const string& fileName,
+                              const vector<pair<string, string>>& queries) {
+    string filePath;
+    ofstream outFile = openDataOutputFile(fileName, filePath);
+    if (!outFile.is_open()) {
+        cerr << "[Error] Generated SQL file '" << filePath << "' create nahi ho saka!" << endl;
+        return;
+    }
+
+    time_t now = time(nullptr);
+    outFile << "# QIR-DB: Generated SQL Queries" << endl;
+    outFile << "# Generated: " << ctime(&now);
+    outFile << "# " << string(56, '=') << endl;
+    outFile << endl;
+
+    for (const auto& [dialect, sql] : queries) {
+        if (!sql.empty()) {
+            outFile << "[" << dialect << "]" << endl;
+            outFile << sql << endl;
+            outFile << endl;
+        }
+    }
+
+    outFile.close();
+    cout << "  [Output] SQL saved to : " << filePath << endl;
 }

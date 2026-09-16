@@ -64,17 +64,18 @@ public:
 void showBanner() {
     cout << endl;
     cout << "================================================================" << endl;
-    cout << "   _   _ _             _ _     _        _       _              " << endl;
-    cout << "  | | | (_)_ __   __ _| (_)___| |__    | | ___ (_)_ __        " << endl;
-    cout << "  | |_| | | '_ \\ / _` | | / __| '_ \\   | |/ _ \\| | '_ \\      " << endl;
-    cout << "  |  _  | | | | | (_| | | \\__ \\ | | |  | | (_) | | | | |     " << endl;
-    cout << "  |_| |_|_|_| |_|\\__, |_|_|___/_| |_|  |_|\\___/|_|_| |_|     " << endl;
-    cout << "                 |___/                                         " << endl;
+    cout << "    ___  ___ ____        ____  ____                             " << endl;
+    cout << "   / _ \\|_ _|  _ \\      |  _ \\| __ )                            " << endl;
+    cout << "  | | | || || |_) |_____| | | |  _ \\                           " << endl;
+    cout << "  | |_| || ||  _ <______|_| |_| |_) |                          " << endl;
+    cout << "   \\__\\_\\___|_| \\_\\       |____/|____/                           " << endl;
+    cout << "                                                               " << endl;
     cout << "================================================================" << endl;
-    cout << "  Hinglish Schema-Aware Join Engine                            " << endl;
-    cout << "  File-Based Mini Relational Processor in C++                  " << endl;
-    cout << "  Type 'band karo' to exit.                                    " << endl;
-    cout << "  Type 'madad' for supported commands.                         " << endl;
+    cout << "  QIR-DB: Query Intermediate Representation Compiler            " << endl;
+    cout << "  Multi-Database Translation Engine (Hinglish -> SQL)           " << endl;
+    cout << "  Targets: MySQL | PostgreSQL | SQLite | MongoDB                " << endl;
+    cout << "  Type 'band karo' to exit.                                     " << endl;
+    cout << "  Type 'madad' for supported commands.                          " << endl;
     cout << "================================================================" << endl;
     cout << endl;
 }
@@ -124,6 +125,10 @@ void showHelp() {
     cout << endl;
     cout << "  9. HELP:" << endl;
     cout << "     madad" << endl;
+    cout << endl;
+    cout << "  [QIR-DB] Every query also generates equivalent SQL for:" << endl;
+    cout << "     MySQL | PostgreSQL | SQLite | MongoDB" << endl;
+    cout << "     Generated SQL is printed to terminal and saved to data/ folder." << endl;
     cout << endl;
 }
 
