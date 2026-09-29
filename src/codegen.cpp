@@ -17,6 +17,14 @@
 
 #include "codegen.h"
 #include <sstream>
+#include <utility>
+
+static string selectValueLiteral(const string& value) {
+    if (!value.empty() && value.find_first_not_of("-0123456789.") == string::npos) {
+        return value;
+    }
+    return "'" + value + "'";
+}
 
 // ============================================================
 //  CodeGenerator base — shared helper
@@ -118,12 +126,36 @@ string MySQLCodeGen::generateAggregate(const ParsedCommand& cmd) const {
     return sql;
 }
 
+string MySQLCodeGen::generateSelect(const ParsedCommand& cmd) const {
+    string sql = "SELECT *\nFROM " + q(cmd.leftTable);
+    if (!cmd.filterColumn.empty()) {
+        sql += "\nWHERE " + q(cmd.filterColumn) + " " + cmd.filterOperator + " "
+            + selectValueLiteral(cmd.filterValue);
+    }
+    if (!cmd.orderColumn.empty()) {
+        sql += "\nORDER BY " + q(cmd.orderColumn) + (cmd.orderDescending ? " DESC" : " ASC");
+    }
+    if (cmd.limit >= 0) sql += "\nLIMIT " + to_string(cmd.limit);
+    return sql + ";";
+}
+
+string MySQLCodeGen::generateGroupAggregate(const ParsedCommand& cmd) const {
+    string functionName = aggFuncToString(cmd.aggFunc);
+    return "SELECT " + q(cmd.groupColumn) + ", " + functionName + "(" + q(cmd.aggColumn)
+        + ") AS " + q(functionName + "_" + cmd.aggColumn)
+        + "\nFROM " + q(cmd.aggTable) + "\nGROUP BY " + q(cmd.groupColumn) + ";";
+}
+
 string MySQLCodeGen::generate(const ParsedCommand& cmd) const {
     switch (cmd.type) {
         case CMD_INNER_JOIN:
             return generateTwoTableJoin(cmd, "INNER JOIN");
         case CMD_LEFT_JOIN:
             return generateTwoTableJoin(cmd, "LEFT JOIN");
+        case CMD_RIGHT_JOIN:
+            return generateTwoTableJoin(cmd, "RIGHT JOIN");
+        case CMD_FULL_OUTER_JOIN:
+            return generateTwoTableJoin(cmd, "FULL OUTER JOIN");
         case CMD_CROSS_JOIN:
             return generateTwoTableJoin(cmd, "CROSS JOIN");
         case CMD_INNER_JOIN_3:
@@ -132,6 +164,10 @@ string MySQLCodeGen::generate(const ParsedCommand& cmd) const {
             return generateThreeTableJoin(cmd, "LEFT JOIN");
         case CMD_AGGREGATE:
             return generateAggregate(cmd);
+        case CMD_SELECT:
+            return generateSelect(cmd);
+        case CMD_GROUP_AGGREGATE:
+            return generateGroupAggregate(cmd);
         default:
             return "";
     }
@@ -221,12 +257,36 @@ string PostgresCodeGen::generateAggregate(const ParsedCommand& cmd) const {
     return sql;
 }
 
+string PostgresCodeGen::generateSelect(const ParsedCommand& cmd) const {
+    string sql = "SELECT *\nFROM " + q(cmd.leftTable);
+    if (!cmd.filterColumn.empty()) {
+        sql += "\nWHERE " + q(cmd.filterColumn) + " " + cmd.filterOperator + " "
+            + selectValueLiteral(cmd.filterValue);
+    }
+    if (!cmd.orderColumn.empty()) {
+        sql += "\nORDER BY " + q(cmd.orderColumn) + (cmd.orderDescending ? " DESC" : " ASC");
+    }
+    if (cmd.limit >= 0) sql += "\nLIMIT " + to_string(cmd.limit);
+    return sql + ";";
+}
+
+string PostgresCodeGen::generateGroupAggregate(const ParsedCommand& cmd) const {
+    string functionName = aggFuncToString(cmd.aggFunc);
+    return "SELECT " + q(cmd.groupColumn) + ", " + functionName + "(" + q(cmd.aggColumn)
+        + ") AS " + q(functionName + "_" + cmd.aggColumn)
+        + "\nFROM " + q(cmd.aggTable) + "\nGROUP BY " + q(cmd.groupColumn) + ";";
+}
+
 string PostgresCodeGen::generate(const ParsedCommand& cmd) const {
     switch (cmd.type) {
         case CMD_INNER_JOIN:
             return generateTwoTableJoin(cmd, "INNER JOIN");
         case CMD_LEFT_JOIN:
             return generateTwoTableJoin(cmd, "LEFT JOIN");
+        case CMD_RIGHT_JOIN:
+            return generateTwoTableJoin(cmd, "RIGHT JOIN");
+        case CMD_FULL_OUTER_JOIN:
+            return generateTwoTableJoin(cmd, "FULL OUTER JOIN");
         case CMD_CROSS_JOIN:
             return generateTwoTableJoin(cmd, "CROSS JOIN");
         case CMD_INNER_JOIN_3:
@@ -235,6 +295,10 @@ string PostgresCodeGen::generate(const ParsedCommand& cmd) const {
             return generateThreeTableJoin(cmd, "LEFT JOIN");
         case CMD_AGGREGATE:
             return generateAggregate(cmd);
+        case CMD_SELECT:
+            return generateSelect(cmd);
+        case CMD_GROUP_AGGREGATE:
+            return generateGroupAggregate(cmd);
         default:
             return "";
     }
@@ -324,12 +388,36 @@ string SQLiteCodeGen::generateAggregate(const ParsedCommand& cmd) const {
     return sql;
 }
 
+string SQLiteCodeGen::generateSelect(const ParsedCommand& cmd) const {
+    string sql = "SELECT *\nFROM " + q(cmd.leftTable);
+    if (!cmd.filterColumn.empty()) {
+        sql += "\nWHERE " + q(cmd.filterColumn) + " " + cmd.filterOperator + " "
+            + selectValueLiteral(cmd.filterValue);
+    }
+    if (!cmd.orderColumn.empty()) {
+        sql += "\nORDER BY " + q(cmd.orderColumn) + (cmd.orderDescending ? " DESC" : " ASC");
+    }
+    if (cmd.limit >= 0) sql += "\nLIMIT " + to_string(cmd.limit);
+    return sql + ";";
+}
+
+string SQLiteCodeGen::generateGroupAggregate(const ParsedCommand& cmd) const {
+    string functionName = aggFuncToString(cmd.aggFunc);
+    return "SELECT " + q(cmd.groupColumn) + ", " + functionName + "(" + q(cmd.aggColumn)
+        + ") AS " + q(functionName + "_" + cmd.aggColumn)
+        + "\nFROM " + q(cmd.aggTable) + "\nGROUP BY " + q(cmd.groupColumn) + ";";
+}
+
 string SQLiteCodeGen::generate(const ParsedCommand& cmd) const {
     switch (cmd.type) {
         case CMD_INNER_JOIN:
             return generateTwoTableJoin(cmd, "INNER JOIN");
         case CMD_LEFT_JOIN:
             return generateTwoTableJoin(cmd, "LEFT JOIN");
+        case CMD_RIGHT_JOIN:
+            return generateTwoTableJoin(cmd, "RIGHT JOIN");
+        case CMD_FULL_OUTER_JOIN:
+            return generateTwoTableJoin(cmd, "FULL OUTER JOIN");
         case CMD_CROSS_JOIN:
             return generateTwoTableJoin(cmd, "CROSS JOIN");
         case CMD_INNER_JOIN_3:
@@ -550,12 +638,59 @@ string MongoCodeGen::generateAggregate(const ParsedCommand& cmd) const {
     return sql;
 }
 
+string MongoCodeGen::generateSelect(const ParsedCommand& cmd) const {
+    string sql = "db." + cmd.leftTable + ".aggregate([";
+    if (!cmd.filterColumn.empty()) {
+        string op = cmd.filterOperator == "=" ? "$eq" :
+                    cmd.filterOperator == "!=" ? "$ne" :
+                    cmd.filterOperator == ">" ? "$gt" :
+                    cmd.filterOperator == "<" ? "$lt" :
+                    cmd.filterOperator == ">=" ? "$gte" : "$lte";
+        sql += "\n  { $match: { " + cmd.filterColumn + ": { " + op + ": "
+            + selectValueLiteral(cmd.filterValue) + " } } },";
+    }
+    if (!cmd.orderColumn.empty()) {
+        sql += "\n  { $sort: { " + cmd.orderColumn + ": "
+            + (cmd.orderDescending ? "-1" : "1") + " } },";
+    }
+    if (cmd.limit >= 0) sql += "\n  { $limit: " + to_string(cmd.limit) + " },";
+    if (sql.back() == ',') sql.pop_back();
+    sql += "\n]);";
+    return sql;
+}
+
+string MongoCodeGen::generateGroupAggregate(const ParsedCommand& cmd) const {
+    string functionName = aggFuncToString(cmd.aggFunc);
+    string accumulator;
+    if (cmd.aggFunc == AGG_COUNT) {
+        accumulator = "{ $sum: 1 }";
+    } else {
+        string operatorName = cmd.aggFunc == AGG_SUM ? "$sum" :
+                              cmd.aggFunc == AGG_AVG ? "$avg" :
+                              cmd.aggFunc == AGG_MIN ? "$min" : "$max";
+        accumulator = "{ " + operatorName + ": \"$" + cmd.aggColumn + "\" }";
+    }
+    return "db." + cmd.aggTable + ".aggregate([\n"
+        + "  { $group: {\n"
+        + "      _id: \"$" + cmd.groupColumn + "\",\n"
+        + "      " + functionName + "_" + cmd.aggColumn + ": " + accumulator + "\n"
+        + "  }}\n]);";
+}
+
 string MongoCodeGen::generate(const ParsedCommand& cmd) const {
     switch (cmd.type) {
         case CMD_INNER_JOIN:
             return generateLookup(cmd);
         case CMD_LEFT_JOIN:
             return generateLeftLookup(cmd);
+        case CMD_RIGHT_JOIN: {
+            ParsedCommand swapped = cmd;
+            swap(swapped.leftTable, swapped.rightTable);
+            swap(swapped.leftColumn, swapped.rightColumn);
+            return generateLeftLookup(swapped);
+        }
+        case CMD_FULL_OUTER_JOIN:
+            return generateLeftLookup(cmd) + "\n// FULL OUTER JOIN also requires the unmatched rows from the right table.\n// Use a second reversed LEFT JOIN and UNION in MongoDB.\n";
         case CMD_CROSS_JOIN:
             return generateCrossLookup(cmd);
         case CMD_INNER_JOIN_3:
@@ -564,6 +699,10 @@ string MongoCodeGen::generate(const ParsedCommand& cmd) const {
             return generateThreeTableLookup(cmd, true);
         case CMD_AGGREGATE:
             return generateAggregate(cmd);
+        case CMD_SELECT:
+            return generateSelect(cmd);
+        case CMD_GROUP_AGGREGATE:
+            return generateGroupAggregate(cmd);
         default:
             return "";
     }

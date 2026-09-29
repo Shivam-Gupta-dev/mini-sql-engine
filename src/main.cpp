@@ -86,7 +86,7 @@ void showHelp() {
     cout << "--------------------" << endl;
     cout << "  General JOIN syntax:" << endl;
     cout << "     <t1> aur <t2> ko <t1>.<col1> = <t2>.<col2> par <join_type> join karke dikha" << endl;
-    cout << "     join_type: inner, left" << endl;
+    cout << "     join_type: inner, left, right, full outer" << endl;
     cout << "     Note: join_type optional hai; 'par join' default INNER JOIN chalata hai." << endl;
     cout << endl;
     cout << "  1. INNER JOIN:" << endl;
@@ -97,39 +97,106 @@ void showHelp() {
     cout << "     Syntax : <t1> aur <t2> ko <t1>.<col1> = <t2>.<col2> par left join karke dikha" << endl;
     cout << "     Example: students aur marks ko students.id = marks.student_id par left join karke dikha" << endl;
     cout << endl;
-    cout << "  3. DEFAULT INNER JOIN:" << endl;
+    cout << "  3. RIGHT JOIN / FULL OUTER JOIN:" << endl;
+    cout << "     Syntax : <t1> aur <t2> ko <t1>.<col1> = <t2>.<col2> par right join karke dikha" << endl;
+    cout << "     Syntax : <t1> aur <t2> ko <t1>.<col1> = <t2>.<col2> par full outer join karke dikha" << endl;
+    cout << endl;
+    cout << "  4. DEFAULT INNER JOIN:" << endl;
     cout << "     Syntax : <t1> aur <t2> ko <t1>.<col1> = <t2>.<col2> par join karke dikha" << endl;
     cout << "     Example: students aur marks ko students.id = marks.student_id par join karke dikha" << endl;
     cout << endl;
-    cout << "  4. CROSS JOIN:" << endl;
+    cout << "  5. CROSS JOIN:" << endl;
     cout << "     Syntax : <t1> aur <t2> ko cross join karke dikha" << endl;
     cout << "     Example: students aur courses ko cross join karke dikha" << endl;
     cout << endl;
-    cout << "  5. AGGREGATION ON JOIN:" << endl;
+    cout << "  6. AGGREGATION ON JOIN:" << endl;
     cout << "     Syntax : <t1> aur <t2> ko <t1>.<col1> = <t2>.<col2> par <inner|left> join karke <table>.<col> ka <func> nikal kar dikha" << endl;
     cout << "     Syntax : <t1> aur <t2> ko <t1>.<col1> = <t2>.<col2> par <inner|left> join karke <col> ka <func> nikal kar dikha" << endl;
     cout << "     Functions: sum, avg, count, min, max" << endl;
     cout << "     Example : students aur marks ko students.id = marks.student_id par inner join karke marks.score ka sum nikal kar dikha" << endl;
     cout << "     Example : students aur marks ko students.id = marks.student_id par left join karke score ka avg nikal kar dikha" << endl;
     cout << endl;
-    cout << "  6. SINGLE TABLE AGGREGATION:" << endl;
+    cout << "  7. SINGLE TABLE AGGREGATION:" << endl;
     cout << "     Syntax : <table> me <column> ka <sum|avg|count|min|max> nikal kar dikha" << endl;
     cout << "     Example: marks me score ka avg nikal kar dikha" << endl;
     cout << endl;
-    cout << "  7. THREE TABLE JOIN:" << endl;
+    cout << "  8. FILTER / SORT / LIMIT:" << endl;
+    cout << "     Syntax : <table> ko where <column> <operator> <value> order by <column> <asc|desc> limit <n> dikha" << endl;
+    cout << "     Example: marks ko where score >= 90 order by score desc limit 5 dikha" << endl;
+    cout << "     Also supported: jahan, sort; operators =, !=, >, <, >=, <=" << endl;
+    cout << endl;
+    cout << "  9. THREE TABLE JOIN:" << endl;
     cout << "     Syntax : <t1> aur <t2> aur <t3> ko <t1>.<pk> = <t2>.<fk> aur <t2>.<fk> = <t3>.<pk> par <inner|left> join karke dikha" << endl;
     cout << "     Example: students aur enrollments aur courses ko students.id = enrollments.student_id aur enrollments.course_id = courses.course_id par inner join karke dikha" << endl;
     cout << endl;
-    cout << "  8. EXIT:" << endl;
+    cout << "  10. EXIT:" << endl;
     cout << "     band karo" << endl;
     cout << endl;
-    cout << "  9. HELP:" << endl;
+    cout << "  11. HELP:" << endl;
     cout << "     madad" << endl;
     cout << endl;
     cout << "  [QIR-DB] Every query also generates equivalent SQL for:" << endl;
     cout << "     MySQL | PostgreSQL | SQLite | MongoDB" << endl;
     cout << "     Generated SQL is printed to terminal and saved to data/ folder." << endl;
     cout << endl;
+}
+
+string commandTypeName(CommandType type) {
+    switch (type) {
+        case CMD_INNER_JOIN: return "INNER_JOIN";
+        case CMD_LEFT_JOIN: return "LEFT_JOIN";
+        case CMD_RIGHT_JOIN: return "RIGHT_JOIN";
+        case CMD_FULL_OUTER_JOIN: return "FULL_OUTER_JOIN";
+        case CMD_CROSS_JOIN: return "CROSS_JOIN";
+        case CMD_INNER_JOIN_3: return "INNER_JOIN_3";
+        case CMD_LEFT_JOIN_3: return "LEFT_JOIN_3";
+        case CMD_AGGREGATE: return "AGGREGATE";
+        case CMD_SELECT: return "SELECT";
+        case CMD_GROUP_AGGREGATE: return "GROUP_AGGREGATE";
+        case CMD_EXIT: return "EXIT";
+        default: return "UNKNOWN";
+    }
+}
+
+string aggregationFunctionName(AggregationFunction function) {
+    switch (function) {
+        case AGG_SUM: return "SUM";
+        case AGG_AVG: return "AVG";
+        case AGG_COUNT: return "COUNT";
+        case AGG_MIN: return "MIN";
+        case AGG_MAX: return "MAX";
+        default: return "NONE";
+    }
+}
+
+void showQIR(const ParsedCommand& command) {
+    cout << endl;
+    cout << "  ======================== QIR =========================" << endl;
+    cout << "  type: " << commandTypeName(command.type) << endl;
+    if (!command.leftTable.empty()) cout << "  left_table: " << command.leftTable << endl;
+    if (!command.rightTable.empty()) cout << "  right_table: " << command.rightTable << endl;
+    if (!command.thirdTable.empty()) cout << "  third_table: " << command.thirdTable << endl;
+    if (!command.leftColumn.empty()) cout << "  left_column: " << command.leftColumn << endl;
+    if (!command.rightColumn.empty()) cout << "  right_column: " << command.rightColumn << endl;
+    if (!command.secondJoinTable.empty()) cout << "  second_join_table: " << command.secondJoinTable << endl;
+    if (!command.secondLeftColumn.empty()) cout << "  second_left_column: " << command.secondLeftColumn << endl;
+    if (!command.thirdColumn.empty()) cout << "  third_column: " << command.thirdColumn << endl;
+    if (!command.aggTable.empty()) cout << "  aggregation_table: " << command.aggTable << endl;
+    if (!command.aggColumn.empty()) cout << "  aggregation_column: " << command.aggColumn << endl;
+    if (!command.groupColumn.empty()) cout << "  group_column: " << command.groupColumn << endl;
+    if (command.aggFunc != AGG_NONE) {
+        cout << "  aggregation_function: " << aggregationFunctionName(command.aggFunc) << endl;
+    }
+    if (!command.filterColumn.empty()) {
+        cout << "  filter: " << command.filterColumn << " "
+             << command.filterOperator << " " << command.filterValue << endl;
+    }
+    if (!command.orderColumn.empty()) {
+        cout << "  order_by: " << command.orderColumn
+             << (command.orderDescending ? " DESC" : " ASC") << endl;
+    }
+    if (command.limit >= 0) cout << "  limit: " << command.limit << endl;
+    cout << "  ========================================================" << endl;
 }
 
 // ============================================================
@@ -145,6 +212,7 @@ int main(int argc, char* argv[]) {
         // Single command mode (for Streamlit/external calls)
         string input = argv[1];
         ParsedCommand cmd = parser.parse(input);
+        showQIR(cmd);
         engine.execute(cmd);
         return 0;
     }
@@ -182,6 +250,7 @@ int main(int argc, char* argv[]) {
 
         // Parse the input command
         ParsedCommand cmd = parser.parse(input);
+        showQIR(cmd);
 
         // Handle exit
         if (cmd.type == CMD_EXIT) {

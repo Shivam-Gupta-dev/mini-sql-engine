@@ -35,10 +35,11 @@ def build_engine():
             "-pedantic",
             "-o",
             str(TEST_EXE),
-            "main.cpp",
-            "parser.cpp",
-            "engine.cpp",
-            "table.cpp",
+            "src/main.cpp",
+            "src/parser.cpp",
+            "src/engine.cpp",
+            "src/table.cpp",
+            "src/codegen.cpp",
         ]
     )
 
@@ -81,6 +82,26 @@ def test_single_table_aggregation():
     output = execute_hinglish("marks me score ka avg nikal kar dikha")
     assert_contains(output, ">> AGGREGATE: AVG of marks.score")
     assert_contains(output, "84.2")
+
+
+def test_select_filter_sort_limit():
+    output = execute_hinglish(
+        "marks ko where score >= 90 order by score desc limit 5 dikha"
+    )
+    assert_contains(output, "type: SELECT")
+    assert_contains(output, "filter: score >= 90")
+    assert_contains(output, "order_by: score DESC")
+    assert_contains(output, "Total result rows: 5")
+
+
+def test_grouped_aggregation():
+    output = execute_hinglish(
+        "marks group by subject score ka avg nikal kar dikha"
+    )
+    assert_contains(output, "type: GROUP_AGGREGATE")
+    assert_contains(output, "GROUP BY subject")
+    assert_contains(output, "Chemistry")
+    assert_contains(output, "Total groups: 3")
 
 
 def test_right_join():
@@ -138,6 +159,8 @@ def main():
             test_left_join,
             test_join_aggregation,
             test_single_table_aggregation,
+            test_select_filter_sort_limit,
+            test_grouped_aggregation,
             test_right_join,
             test_full_outer_join,
             test_invalid_table_error,

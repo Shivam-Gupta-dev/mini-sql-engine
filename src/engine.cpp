@@ -71,6 +71,20 @@ void Engine::execute(const ParsedCommand& cmd) {
             generateAllSQL(cmd);
             break;
 
+        case CMD_RIGHT_JOIN:
+            rightJoin(cmd.leftTable, cmd.rightTable,
+                      cmd.leftColumn, cmd.rightColumn,
+                      cmd.aggTable, cmd.aggColumn, cmd.aggFunc);
+            generateAllSQL(cmd);
+            break;
+
+        case CMD_FULL_OUTER_JOIN:
+            fullOuterJoin(cmd.leftTable, cmd.rightTable,
+                          cmd.leftColumn, cmd.rightColumn,
+                          cmd.aggTable, cmd.aggColumn, cmd.aggFunc);
+            generateAllSQL(cmd);
+            break;
+
         case CMD_CROSS_JOIN:
             crossJoin(cmd.leftTable, cmd.rightTable,
                       cmd.aggTable, cmd.aggColumn, cmd.aggFunc);
@@ -100,6 +114,17 @@ void Engine::execute(const ParsedCommand& cmd) {
             generateAllSQL(cmd);
             break;
 
+        case CMD_SELECT:
+            selectTable(cmd.leftTable, cmd.filterColumn, cmd.filterOperator,
+                        cmd.filterValue, cmd.orderColumn, cmd.orderDescending, cmd.limit);
+            generateAllSQL(cmd);
+            break;
+
+        case CMD_GROUP_AGGREGATE:
+            groupAggregate(cmd.aggTable, cmd.groupColumn, cmd.aggColumn, cmd.aggFunc);
+            generateAllSQL(cmd);
+            break;
+
         case CMD_EXIT:
             // Handled in main.cpp
             break;
@@ -109,6 +134,8 @@ void Engine::execute(const ParsedCommand& cmd) {
             cout << "\nSupported commands:" << endl;
             cout << "  INNER JOIN: <t1> aur <t2> ko <t1>.<col1> = <t2>.<col2> par inner join karke dikha" << endl;
             cout << "  LEFT JOIN : <t1> aur <t2> ko <t1>.<col1> = <t2>.<col2> par left join karke dikha" << endl;
+            cout << "  RIGHT JOIN: <t1> aur <t2> ko <t1>.<col1> = <t2>.<col2> par right join karke dikha" << endl;
+            cout << "  FULL JOIN : <t1> aur <t2> ko <t1>.<col1> = <t2>.<col2> par full outer join karke dikha" << endl;
             cout << "  CROSS JOIN: <t1> aur <t2> ko cross join karke dikha" << endl;
             cout << "  AGG. JOIN : ... join karke <table>.<column> ka <sum|avg|count|min|max> nikal kar dikha" << endl;
             cout << "  AGGREGATE : <table> me <column> ka <sum|avg|count|min|max> nikal kar dikha" << endl;
@@ -401,6 +428,96 @@ void Engine::leftJoin(const string& tableA, const string& tableB,
     string txtName = "output_left_join_" + tableA + "_" + tableB + ".txt";
     saveJoinOutput(csvName, tA, tB, colA, colB, "LEFT JOIN", resultRows);
     saveTextOutput(txtName, tA, tB, colA, colB, "LEFT JOIN", resultRows);
+
+    if (aggFunc != AGG_NONE) {
+        processJoinAggregation(resultRows, tA, tB, aggTable, aggCol, aggFunc);
+    }
+    cout << endl;
+}
+
+void Engine::rightJoin(const string& tableA, const string& tableB,
+                       const string& colA, const string& colB,
+                       const string& aggTable, const string& aggCol,
+                       AggregationFunction aggFunc) {
+    outerJoin(tableA, tableB, colA, colB, aggTable, aggCol, aggFunc,
+              false, true, "RIGHT JOIN", "right_join");
+}
+
+void Engine::fullOuterJoin(const string& tableA, const string& tableB,
+                           const string& colA, const string& colB,
+                           const string& aggTable, const string& aggCol,
+                           AggregationFunction aggFunc) {
+    outerJoin(tableA, tableB, colA, colB, aggTable, aggCol, aggFunc,
+              true, true, "FULL OUTER JOIN", "full_outer_join");
+}
+
+void Engine::outerJoin(const string& tableA, const string& tableB,
+                       const string& colA, const string& colB,
+                       const string& aggTable, const string& aggCol,
+                       AggregationFunction aggFunc, bool preserveLeft,
+                       bool preserveRight, const string& joinLabel,
+                       const string& filePrefix) {
+    Table tA, tB;
+    if (!loadTable(tableA, tA) || !loadTable(tableB, tB)) {
+        cerr << "[Error] Join tables load nahi ho sake!" << endl;
+        return;
+    }
+
+    cout << "\n[Info] Loading schemas..." << endl;
+    tA.printSchema();
+    tB.printSchema();
+
+    if (!validateJoin(tA, tB, colA, colB)) {
+        return;
+    }
+
+    int idxA = tA.getColumnIndex(colA);
+    int idxB = tB.getColumnIndex(colB);
+    vector<vector<string>> resultRows;
+    vector<bool> matchedRight(tB.rows.size(), false);
+
+    for (const auto& rowA : tA.rows) {
+        bool matchedLeft = false;
+        for (size_t rightIndex = 0; rightIndex < tB.rows.size(); rightIndex++) {
+            const auto& rowB = tB.rows[rightIndex];
+            if (rowA[idxA] != rowB[idxB]) {
+                continue;
+            }
+
+            vector<string> merged;
+            merged.insert(merged.end(), rowA.begin(), rowA.end());
+            merged.insert(merged.end(), rowB.begin(), rowB.end());
+            resultRows.push_back(merged);
+            matchedLeft = true;
+            matchedRight[rightIndex] = true;
+        }
+
+        if (preserveLeft && !matchedLeft) {
+            vector<string> merged(rowA.begin(), rowA.end());
+            merged.insert(merged.end(), tB.schema.size(), "NULL");
+            resultRows.push_back(merged);
+        }
+    }
+
+    if (preserveRight) {
+        for (size_t rightIndex = 0; rightIndex < tB.rows.size(); rightIndex++) {
+            if (matchedRight[rightIndex]) {
+                continue;
+            }
+            vector<string> merged(tA.schema.size(), "NULL");
+            merged.insert(merged.end(), tB.rows[rightIndex].begin(), tB.rows[rightIndex].end());
+            resultRows.push_back(merged);
+        }
+    }
+
+    cout << "\n>> " << joinLabel << ": " << tableA << "." << colA
+         << " = " << tableB << "." << colB << endl;
+    printJoinTable(tA, tB, resultRows);
+    cout << "\n  Total result rows: " << resultRows.size() << endl;
+
+    string baseName = "output_" + filePrefix + "_" + tableA + "_" + tableB;
+    saveJoinOutput(baseName + ".csv", tA, tB, colA, colB, joinLabel, resultRows);
+    saveTextOutput(baseName + ".txt", tA, tB, colA, colB, joinLabel, resultRows);
 
     if (aggFunc != AGG_NONE) {
         processJoinAggregation(resultRows, tA, tB, aggTable, aggCol, aggFunc);
@@ -732,6 +849,198 @@ void Engine::aggregate(const string& tableName, const string& columnName,
     saveAggregateOutput(txtName, tableName, columnName, funcStr, result);
 }
 
+void Engine::selectTable(const string& tableName, const string& filterColumn,
+                         const string& filterOperator, const string& filterValue,
+                         const string& orderColumn, bool orderDescending, int limit) {
+    Table table;
+    if (!loadTable(tableName, table)) {
+        cerr << "[Error] Table '" << tableName << "' load nahi ho saka!" << endl;
+        return;
+    }
+
+    int filterIndex = filterColumn.empty() ? -1 : table.getColumnIndex(filterColumn);
+    if (!filterColumn.empty() && filterIndex < 0) {
+        cerr << "[Error] Column '" << filterColumn << "' table '" << tableName
+             << "' mein nahi hai!" << endl;
+        return;
+    }
+
+    int orderIndex = orderColumn.empty() ? -1 : table.getColumnIndex(orderColumn);
+    if (!orderColumn.empty() && orderIndex < 0) {
+        cerr << "[Error] Column '" << orderColumn << "' table '" << tableName
+             << "' mein nahi hai!" << endl;
+        return;
+    }
+
+    string cleanFilterValue = filterValue;
+    if (cleanFilterValue.size() >= 2 &&
+        ((cleanFilterValue.front() == '\'' && cleanFilterValue.back() == '\'') ||
+         (cleanFilterValue.front() == '"' && cleanFilterValue.back() == '"'))) {
+        cleanFilterValue = cleanFilterValue.substr(1, cleanFilterValue.size() - 2);
+    }
+
+    auto compareValues = [&](const string& left, const string& right,
+                             const string& op, int columnIndex) {
+        bool numeric = table.schema[columnIndex].type == "INT";
+        if (numeric) {
+            try {
+                long long leftNumber = stoll(left);
+                long long rightNumber = stoll(right);
+                if (op == "=") return leftNumber == rightNumber;
+                if (op == "!=") return leftNumber != rightNumber;
+                if (op == ">") return leftNumber > rightNumber;
+                if (op == "<") return leftNumber < rightNumber;
+                if (op == ">=") return leftNumber >= rightNumber;
+                if (op == "<=") return leftNumber <= rightNumber;
+            } catch (...) {
+                return false;
+            }
+        }
+        if (op == "=") return left == right;
+        if (op == "!=") return left != right;
+        if (op == ">") return left > right;
+        if (op == "<") return left < right;
+        if (op == ">=") return left >= right;
+        if (op == "<=") return left <= right;
+        return false;
+    };
+
+    vector<vector<string>> resultRows;
+    for (const auto& row : table.rows) {
+        if (filterIndex >= 0 &&
+            !compareValues(row[filterIndex], cleanFilterValue, filterOperator, filterIndex)) {
+            continue;
+        }
+        resultRows.push_back(row);
+    }
+
+    if (orderIndex >= 0) {
+        sort(resultRows.begin(), resultRows.end(), [&](const vector<string>& left, const vector<string>& right) {
+            const string& leftValue = left[orderIndex];
+            const string& rightValue = right[orderIndex];
+            bool less = compareValues(leftValue, rightValue, "<", orderIndex);
+            bool greater = compareValues(leftValue, rightValue, ">", orderIndex);
+            return orderDescending ? greater : less;
+        });
+    }
+
+    if (limit >= 0 && static_cast<size_t>(limit) < resultRows.size()) {
+        resultRows.resize(static_cast<size_t>(limit));
+    }
+
+    cout << "\n>> SELECT: " << tableName;
+    if (filterIndex >= 0) cout << " WHERE " << filterColumn << " " << filterOperator << " " << filterValue;
+    if (orderIndex >= 0) cout << " ORDER BY " << orderColumn << (orderDescending ? " DESC" : " ASC");
+    if (limit >= 0) cout << " LIMIT " << limit;
+    cout << endl;
+    printGenericJoinTable({table}, resultRows);
+    cout << "\n  Total result rows: " << resultRows.size() << endl;
+
+    saveSingleTableOutput("output_select_" + tableName + ".csv", table, resultRows);
+    cout << endl;
+}
+
+void Engine::groupAggregate(const string& tableName, const string& groupColumn,
+                            const string& aggColumn, AggregationFunction func) {
+    Table table;
+    if (!loadTable(tableName, table)) {
+        cerr << "[Error] Table '" << tableName << "' load nahi ho saka!" << endl;
+        return;
+    }
+
+    int groupIndex = table.getColumnIndex(groupColumn);
+    int aggIndex = table.getColumnIndex(aggColumn);
+    if (groupIndex < 0 || aggIndex < 0) {
+        cerr << "[Error] Group ya aggregation column table mein nahi mila!" << endl;
+        return;
+    }
+    if (func != AGG_COUNT && table.schema[aggIndex].type != "INT") {
+        cerr << "[Error] Group aggregation sirf INT columns par kaam karta hai (except COUNT)!" << endl;
+        return;
+    }
+
+    struct GroupStats {
+        long long sum = 0;
+        long long minValue = 0;
+        long long maxValue = 0;
+        int count = 0;
+        bool hasValue = false;
+    };
+    map<string, GroupStats> groups;
+
+    for (const auto& row : table.rows) {
+        if (static_cast<size_t>(groupIndex) >= row.size() ||
+            static_cast<size_t>(aggIndex) >= row.size()) continue;
+        string groupValue = row[groupIndex];
+        string aggregateValue = row[aggIndex];
+        if (aggregateValue == "NULL" || aggregateValue.empty()) continue;
+
+        GroupStats& stats = groups[groupValue];
+        if (func == AGG_COUNT) {
+            stats.count++;
+            continue;
+        }
+        try {
+            long long value = stoll(aggregateValue);
+            stats.sum += value;
+            stats.count++;
+            if (!stats.hasValue) {
+                stats.minValue = value;
+                stats.maxValue = value;
+                stats.hasValue = true;
+            } else {
+                stats.minValue = min(stats.minValue, value);
+                stats.maxValue = max(stats.maxValue, value);
+            }
+        } catch (...) {
+            continue;
+        }
+    }
+
+    string functionName;
+    switch (func) {
+        case AGG_SUM: functionName = "SUM"; break;
+        case AGG_AVG: functionName = "AVG"; break;
+        case AGG_COUNT: functionName = "COUNT"; break;
+        case AGG_MIN: functionName = "MIN"; break;
+        case AGG_MAX: functionName = "MAX"; break;
+        default: return;
+    }
+
+    Table resultTable;
+    resultTable.name = tableName + "_grouped";
+    Column groupResult;
+    groupResult.name = groupColumn;
+    groupResult.type = table.schema[groupIndex].type;
+    Column aggregateResult;
+    aggregateResult.name = functionName + "_" + aggColumn;
+    aggregateResult.type = "INT";
+    resultTable.schema = {groupResult, aggregateResult};
+
+    for (const auto& [groupValue, stats] : groups) {
+        double result = 0;
+        switch (func) {
+            case AGG_SUM: result = stats.sum; break;
+            case AGG_AVG: result = stats.count > 0 ? static_cast<double>(stats.sum) / stats.count : 0; break;
+            case AGG_COUNT: result = stats.count; break;
+            case AGG_MIN: result = stats.hasValue ? stats.minValue : 0; break;
+            case AGG_MAX: result = stats.hasValue ? stats.maxValue : 0; break;
+            default: break;
+        }
+        ostringstream formatted;
+        formatted << result;
+        resultTable.rows.push_back({groupValue, formatted.str()});
+    }
+
+    cout << "\n>> GROUP AGGREGATE: " << functionName << " of " << tableName << "."
+         << aggColumn << " GROUP BY " << groupColumn << endl;
+    printGenericJoinTable({resultTable}, resultTable.rows);
+    cout << "\n  Total groups: " << resultTable.rows.size() << endl;
+    saveSingleTableOutput("output_group_" + tableName + "_" + functionName + "_" + aggColumn + ".csv",
+                          resultTable, resultTable.rows);
+    cout << endl;
+}
+
 // ============================================================
 //  loadTable - Load a table from file, using the cache when possible
 // ============================================================
@@ -847,6 +1156,32 @@ void Engine::saveJoinOutput(const string& fileName, const Table& tA, const Table
         for (size_t i = 0; i < row.size(); i++) {
             if (i > 0) outFile << ",";
             outFile << row[i];
+        }
+        outFile << endl;
+    }
+
+    outFile.close();
+    cout << "  [Output] CSV saved to : " << filePath << endl;
+}
+
+void Engine::saveSingleTableOutput(const string& fileName, const Table& table,
+                                   const vector<vector<string>>& resultRows) {
+    string filePath;
+    ofstream outFile = openDataOutputFile(fileName, filePath);
+    if (!outFile.is_open()) {
+        cerr << "[Error] Output file '" << filePath << "' create nahi ho saka!" << endl;
+        return;
+    }
+
+    for (size_t index = 0; index < table.schema.size(); index++) {
+        if (index > 0) outFile << ",";
+        outFile << table.name << "." << table.schema[index].name;
+    }
+    outFile << endl;
+    for (const auto& row : resultRows) {
+        for (size_t index = 0; index < row.size(); index++) {
+            if (index > 0) outFile << ",";
+            outFile << row[index];
         }
         outFile << endl;
     }
@@ -1183,6 +1518,12 @@ void Engine::generateAllSQL(const ParsedCommand& cmd) {
         case CMD_LEFT_JOIN:
             prefix += "left_join_" + cmd.leftTable + "_" + cmd.rightTable;
             break;
+        case CMD_RIGHT_JOIN:
+            prefix += "right_join_" + cmd.leftTable + "_" + cmd.rightTable;
+            break;
+        case CMD_FULL_OUTER_JOIN:
+            prefix += "full_outer_join_" + cmd.leftTable + "_" + cmd.rightTable;
+            break;
         case CMD_CROSS_JOIN:
             prefix += "cross_join_" + cmd.leftTable + "_" + cmd.rightTable;
             break;
@@ -1194,6 +1535,12 @@ void Engine::generateAllSQL(const ParsedCommand& cmd) {
             break;
         case CMD_AGGREGATE:
             prefix += "agg_" + cmd.aggTable + "_" + cmd.aggColumn;
+            break;
+        case CMD_SELECT:
+            prefix += "select_" + cmd.leftTable;
+            break;
+        case CMD_GROUP_AGGREGATE:
+            prefix += "group_agg_" + cmd.aggTable + "_" + cmd.aggColumn;
             break;
         default:
             prefix += "unknown";

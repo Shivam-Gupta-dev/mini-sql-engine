@@ -92,6 +92,13 @@ ParsedCommand Parser::parse(const string& input) {
     cmd.aggTable = "";
     cmd.aggColumn = "";
     cmd.aggFunc = AGG_NONE;
+    cmd.groupColumn = "";
+    cmd.filterColumn = "";
+    cmd.filterOperator = "";
+    cmd.filterValue = "";
+    cmd.orderColumn = "";
+    cmd.orderDescending = false;
+    cmd.limit = -1;
 
     string trimmed = trim(input);
     if (trimmed.empty()) {
@@ -123,6 +130,140 @@ ParsedCommand Parser::parse(const string& input) {
         if (funcToken == "max") return AGG_MAX;
         return AGG_NONE;
     };
+
+    // ============================================================
+    // COMMAND: GROUPED AGGREGATION
+    // Examples: "marks group by subject score ka avg nikal kar dikha"
+    //           "attendance month ke hisaab se attendance_id ka count nikal kar dikha"
+    // ============================================================
+    bool hasGroupBy = lower.find("group by") != string::npos;
+    bool hasHisaab = lower.find("ke hisaab se") != string::npos;
+    if (lower.find("join") == string::npos &&
+        lower.find("nikal") != string::npos &&
+        lower.find("dikha") != string::npos && (hasGroupBy || hasHisaab)) {
+        int groupIndex = -1;
+        if (hasGroupBy) {
+            for (int index = 0; index + 1 < static_cast<int>(tokens.size()); index++) {
+                if (tokens[index] == "group" && tokens[index + 1] == "by") {
+                    groupIndex = index + 2;
+                    break;
+                }
+            }
+        } else {
+            for (int index = 0; index + 2 < static_cast<int>(tokens.size()); index++) {
+                if (tokens[index + 1] == "ke" && tokens[index + 2] == "hisaab") {
+                    groupIndex = index;
+                    break;
+                }
+            }
+        }
+
+        int kaIndex = -1;
+        for (int index = 0; index < static_cast<int>(tokens.size()); index++) {
+            if (tokens[index] == "ka") {
+                kaIndex = index;
+                break;
+            }
+        }
+        if (groupIndex < 1 || kaIndex <= groupIndex || kaIndex + 1 >= static_cast<int>(tokens.size())) {
+            cerr << "[Error] Group aggregation syntax galat hai." << endl;
+            return cmd;
+        }
+
+        cmd.aggTable = tokens[0];
+        cmd.groupColumn = tokens[groupIndex];
+        cmd.aggColumn = tokens[kaIndex - 1];
+        cmd.aggFunc = parseAggFunc(tokens[kaIndex + 1]);
+        if (cmd.aggFunc == AGG_NONE) {
+            cerr << "[Error] Unknown aggregation function: '" << tokens[kaIndex + 1] << "'." << endl;
+            return cmd;
+        }
+        cmd.type = CMD_GROUP_AGGREGATE;
+        return cmd;
+    }
+
+    // ============================================================
+    // COMMAND: SELECT — optional WHERE/ORDER/LIMIT on one table
+    // Examples: "marks ko where score >= 90 order by score desc limit 5 dikha"
+    //           "students ko jahan age > 20 sort age desc dikha"
+    // ============================================================
+    bool hasSelectKeyword = lower.find("where") != string::npos ||
+                            lower.find("jahan") != string::npos ||
+                            lower.find("order") != string::npos ||
+                            lower.find("sort") != string::npos ||
+                            lower.find("limit") != string::npos;
+    if (lower.find("join") == string::npos &&
+        lower.find("dikha") != string::npos && hasSelectKeyword) {
+        if (tokens.empty()) return cmd;
+        cmd.leftTable = tokens[0];
+
+        int wherePos = -1;
+        int orderPos = -1;
+        int sortPos = -1;
+        int limitPos = -1;
+        for (int index = 0; index < static_cast<int>(tokens.size()); index++) {
+            if ((tokens[index] == "where" || tokens[index] == "jahan") && wherePos < 0) wherePos = index;
+            if (tokens[index] == "order" && orderPos < 0) orderPos = index;
+            if (tokens[index] == "sort" && sortPos < 0) sortPos = index;
+            if (tokens[index] == "limit" && limitPos < 0) limitPos = index;
+        }
+
+        if (wherePos >= 0) {
+            if (wherePos + 3 >= static_cast<int>(tokens.size())) {
+                cerr << "[Error] WHERE syntax galat hai. Use: where column operator value" << endl;
+                return cmd;
+            }
+            cmd.filterColumn = tokens[wherePos + 1];
+            cmd.filterOperator = tokens[wherePos + 2];
+            cmd.filterValue = tokens[wherePos + 3];
+            const vector<string> validOperators = {"=", "!=", ">", "<", ">=", "<="};
+            if (find(validOperators.begin(), validOperators.end(), cmd.filterOperator) == validOperators.end()) {
+                cerr << "[Error] Unsupported filter operator: '" << cmd.filterOperator << "'" << endl;
+                return cmd;
+            }
+        }
+
+        if (orderPos >= 0) {
+            if (orderPos + 2 >= static_cast<int>(tokens.size()) || tokens[orderPos + 1] != "by") {
+                cerr << "[Error] ORDER BY syntax galat hai. Use: order by column [asc|desc]" << endl;
+                return cmd;
+            }
+            cmd.orderColumn = tokens[orderPos + 2];
+            if (orderPos + 3 < static_cast<int>(tokens.size()) &&
+                (tokens[orderPos + 3] == "asc" || tokens[orderPos + 3] == "desc")) {
+                cmd.orderDescending = tokens[orderPos + 3] == "desc";
+            }
+        } else if (sortPos >= 0) {
+            if (sortPos + 1 >= static_cast<int>(tokens.size())) {
+                cerr << "[Error] SORT syntax galat hai. Use: sort column [asc|desc]" << endl;
+                return cmd;
+            }
+            cmd.orderColumn = tokens[sortPos + 1];
+            if (sortPos + 2 < static_cast<int>(tokens.size()) &&
+                (tokens[sortPos + 2] == "asc" || tokens[sortPos + 2] == "desc")) {
+                cmd.orderDescending = tokens[sortPos + 2] == "desc";
+            }
+        }
+
+        if (limitPos >= 0) {
+            if (limitPos + 1 >= static_cast<int>(tokens.size())) {
+                cerr << "[Error] LIMIT ke baad number dena zaroori hai." << endl;
+                return cmd;
+            }
+            try {
+                cmd.limit = stoi(tokens[limitPos + 1]);
+            } catch (...) {
+                cmd.limit = -1;
+            }
+            if (cmd.limit < 0) {
+                cerr << "[Error] LIMIT ek non-negative number hona chahiye." << endl;
+                return cmd;
+            }
+        }
+
+        cmd.type = CMD_SELECT;
+        return cmd;
+    }
 
     if (lower.find("join") == string::npos &&
         lower.find("nikal") != string::npos &&
@@ -170,7 +311,7 @@ ParsedCommand Parser::parse(const string& input) {
         cerr << "[Error] Invalid syntax! Yeh command samajh nahi aaya." << endl;
         cerr << "Expected format:" << endl;
         cerr << "  <t1> aur <t2> ko <t1>.<col1> = <t2>.<col2> par inner join karke dikha" << endl;
-        cerr << "  <t1> aur <t2> ko <t1>.<col1> = <t2>.<col2> par left join karke dikha" << endl;
+        cerr << "  <t1> aur <t2> ko <t1>.<col1> = <t2>.<col2> par left/right/full outer join karke dikha" << endl;
         cerr << "  <t1> aur <t2> ko cross join karke dikha" << endl;
         return cmd;
     }
@@ -412,6 +553,18 @@ ParsedCommand Parser::parse(const string& input) {
             cmd.type = isThreeTableJoin ? CMD_INNER_JOIN_3 : CMD_INNER_JOIN;
         } else if (joinModifier == "left") {
             cmd.type = isThreeTableJoin ? CMD_LEFT_JOIN_3 : CMD_LEFT_JOIN;
+        } else if (joinModifier == "right") {
+            if (isThreeTableJoin) {
+                cerr << "[Error] RIGHT JOIN sirf do tables ke liye supported hai." << endl;
+                return cmd;
+            }
+            cmd.type = CMD_RIGHT_JOIN;
+        } else if (joinModifier == "outer" && joinPos >= 2 && tokens[joinPos - 2] == "full") {
+            if (isThreeTableJoin) {
+                cerr << "[Error] FULL OUTER JOIN sirf do tables ke liye supported hai." << endl;
+                return cmd;
+            }
+            cmd.type = CMD_FULL_OUTER_JOIN;
         } else if (joinModifier == "par") {
             // If "par" is right before "join", default to INNER JOIN
             cmd.type = isThreeTableJoin ? CMD_INNER_JOIN_3 : CMD_INNER_JOIN;

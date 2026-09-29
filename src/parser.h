@@ -40,10 +40,14 @@ using namespace std;
 enum CommandType {
     CMD_INNER_JOIN,     // INNER JOIN between two tables
     CMD_LEFT_JOIN,      // LEFT JOIN between two tables
+    CMD_RIGHT_JOIN,     // RIGHT JOIN between two tables
+    CMD_FULL_OUTER_JOIN,// FULL OUTER JOIN between two tables
     CMD_CROSS_JOIN,     // CROSS JOIN between two tables
     CMD_INNER_JOIN_3,   // INNER JOIN across three tables
     CMD_LEFT_JOIN_3,    // LEFT JOIN across three tables
     CMD_AGGREGATE,      // Aggregation on a single table
+    CMD_SELECT,         // Filter, sort, and limit a single table
+    CMD_GROUP_AGGREGATE,// Grouped aggregation on a single table
     CMD_EXIT,           // Exit the program
     CMD_UNKNOWN         // Unrecognized command
 };
@@ -76,6 +80,14 @@ struct ParsedCommand {
     string aggTable;        // Table name for aggregation
     string aggColumn;       // Column name for aggregation
     AggregationFunction aggFunc; // Type of aggregation function
+    string groupColumn;
+
+    string filterColumn;
+    string filterOperator;
+    string filterValue;
+    string orderColumn;
+    bool orderDescending;
+    int limit;
 };
 
 class Parser {

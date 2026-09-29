@@ -62,6 +62,8 @@ private:
 
     // Build a standalone aggregation query
     string generateAggregate(const ParsedCommand& cmd) const;
+    string generateSelect(const ParsedCommand& cmd) const;
+    string generateGroupAggregate(const ParsedCommand& cmd) const;
 };
 
 // ---- PostgreSQL Code Generator ----
@@ -76,6 +78,8 @@ private:
     string generateTwoTableJoin(const ParsedCommand& cmd, const string& joinType) const;
     string generateThreeTableJoin(const ParsedCommand& cmd, const string& joinType) const;
     string generateAggregate(const ParsedCommand& cmd) const;
+    string generateSelect(const ParsedCommand& cmd) const;
+    string generateGroupAggregate(const ParsedCommand& cmd) const;
 };
 
 // ---- SQLite Code Generator ----
@@ -91,6 +95,8 @@ private:
     string generateTwoTableJoin(const ParsedCommand& cmd, const string& joinType) const;
     string generateThreeTableJoin(const ParsedCommand& cmd, const string& joinType) const;
     string generateAggregate(const ParsedCommand& cmd) const;
+    string generateSelect(const ParsedCommand& cmd) const;
+    string generateGroupAggregate(const ParsedCommand& cmd) const;
 };
 
 // ---- MongoDB Code Generator ----
@@ -116,6 +122,8 @@ private:
 
     // Build a standalone $group aggregation
     string generateAggregate(const ParsedCommand& cmd) const;
+    string generateSelect(const ParsedCommand& cmd) const;
+    string generateGroupAggregate(const ParsedCommand& cmd) const;
 
     // Map AggregationFunction to MongoDB accumulator operator
     string mongoAggOp(AggregationFunction func) const;

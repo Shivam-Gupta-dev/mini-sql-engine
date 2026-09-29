@@ -26,8 +26,8 @@ Hinglish Input → Parser → QIR ─────├──→ PostgresCodeGen  �
 | `SQLiteCodeGen` | SQLite dialect (double-quote quoting) |
 | `MongoCodeGen` | MongoDB aggregation pipeline syntax |
 | `Table` | Parses `.tbl` files — schema metadata (PK, FK, types) and data rows |
-| `show_output.py` | Reads CSV output using pandas, displays as formatted table |
-| `streamlit_ui.py` | Web UI with query builder and Generated SQL tab |
+| `app/show_output.py` | Reads CSV output using pandas, displays as formatted table |
+| `app/streamlit_ui.py` | Web UI with visual builders, custom queries, QIR, and Generated SQL |
 
 ---
 
@@ -38,6 +38,9 @@ Hinglish Input → Parser → QIR ─────├──→ PostgresCodeGen  �
 - Supports **INNER JOIN**, **LEFT JOIN**, **CROSS JOIN** with explicit join conditions
 - Supports **3-table JOINs** with chained conditions
 - Supports single-table and joined-result aggregation: `sum`, `avg`, `count`, `min`, `max`
+- Supports single-table filtering, sorting, and limiting with `where`/`jahan`, `order by`/`sort`, and `limit`
+- Supports grouped aggregation with `group by` or `ke hisaab se`
+- Streamlit UI includes a custom Hinglish query editor for advanced commands
 - **Multi-Database SQL Generation**: Every query automatically generates equivalent SQL for MySQL, PostgreSQL, SQLite, and MongoDB
 - Schema validation before every join (column existence, FK reference checks, PK-FK warnings)
 - Accepts **Hinglish (Hindi + English)** commands — no external NLP libraries
@@ -52,14 +55,10 @@ Hinglish Input → Parser → QIR ─────├──→ PostgresCodeGen  �
 
 ```
 HinglishDB/
-├── main.cpp            # Entry point — REPL loop
-├── parser.h / .cpp     # Hinglish command parser
-├── engine.h / .cpp     # Join execution engine with schema validation + SQL generation
-├── codegen.h / .cpp    # Multi-database code generators (MySQL, PostgreSQL, SQLite, MongoDB)
-├── table.h  / .cpp     # Table loader — parses .tbl files (schema + data)
-├── show_output.py      # Python CSV viewer using pandas + tabulate
-├── streamlit_ui.py     # Streamlit Web UI with Generated SQL tab
-├── QIR_DB_PLAN.txt     # Implementation plan document
+├── src/                # C++ query engine source and headers
+├── app/                # Streamlit UI and CSV viewer
+├── docs/               # Project documentation and implementation plan
+├── tests/              # End-to-end engine tests
 └── data/
     ├── students.tbl    # Sample table: students (id, name, age, ...)
     ├── marks.tbl       # Sample table: marks (mark_id, student_id FK, subject, score)
@@ -225,7 +224,7 @@ db.students.aggregate([
 
 ```bash
 cd HinglishDB
-g++ -std=c++17 -o HinglishJoinEngine.exe main.cpp parser.cpp engine.cpp table.cpp codegen.cpp
+g++ -std=c++17 -o HinglishJoinEngine.exe src/main.cpp src/parser.cpp src/engine.cpp src/table.cpp src/codegen.cpp
 ```
 
 ### Run
@@ -238,7 +237,7 @@ g++ -std=c++17 -o HinglishJoinEngine.exe main.cpp parser.cpp engine.cpp table.cp
 
 ```bash
 pip install streamlit pandas
-streamlit run streamlit_ui.py
+streamlit run app/streamlit_ui.py
 ```
 
 ### Install Python dependencies (for CSV viewer)
@@ -250,8 +249,8 @@ pip install pandas tabulate
 ### View CSV output
 
 ```bash
-python show_output.py                                          # interactive mode
-python show_output.py output_inner_join_students_marks.csv     # direct file
+python app/show_output.py                                      # interactive mode
+python app/show_output.py output_inner_join_students_marks.csv # direct file
 ```
 
 ---

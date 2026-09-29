@@ -57,6 +57,14 @@ public:
                   const string &colA, const string &colB,
                   const string &aggTable, const string &aggCol, AggregationFunction aggFunc);
 
+    void rightJoin(const string &tableA, const string &tableB,
+                   const string &colA, const string &colB,
+                   const string &aggTable, const string &aggCol, AggregationFunction aggFunc);
+
+    void fullOuterJoin(const string &tableA, const string &tableB,
+                       const string &colA, const string &colB,
+                       const string &aggTable, const string &aggCol, AggregationFunction aggFunc);
+
     // CROSS JOIN: Cartesian product of two tables (no join condition).
     void crossJoin(const string &tableA, const string &tableB,
                    const string &aggTable, const string &aggCol, AggregationFunction aggFunc);
@@ -69,6 +77,13 @@ public:
 
     // ---- Aggregation operation ----
     void aggregate(const string &tableName, const string &columnName, AggregationFunction func);
+
+    void selectTable(const string &tableName, const string &filterColumn,
+                     const string &filterOperator, const string &filterValue,
+                     const string &orderColumn, bool orderDescending, int limit);
+
+    void groupAggregate(const string &tableName, const string &groupColumn,
+                        const string &aggColumn, AggregationFunction func);
 
 private:
     // Cache of loaded tables to avoid re-reading files
@@ -94,6 +109,12 @@ private:
     bool validateJoin(const Table &tA, const Table &tB,
                       const string &colA, const string &colB);
 
+    void outerJoin(const string &tableA, const string &tableB,
+                   const string &colA, const string &colB,
+                   const string &aggTable, const string &aggCol, AggregationFunction aggFunc,
+                   bool preserveLeft, bool preserveRight,
+                   const string &joinLabel, const string &filePrefix);
+
     // Save join results as a clean CSV file (header + data rows)
     void saveJoinOutput(const string &fileName, const Table &tA, const Table &tB,
                         const string &colA, const string &colB,
@@ -116,6 +137,9 @@ private:
     void saveAggregateOutput(const string &fileName, const string &tableName,
                              const string &colName, const string &funcStr,
                              double result);
+
+    void saveSingleTableOutput(const string &fileName, const Table &table,
+                               const vector<vector<string>> &resultRows);
 
     // Print a complete joined table with widths based on headers and result values.
     int printJoinTable(const Table &tA, const Table &tB,

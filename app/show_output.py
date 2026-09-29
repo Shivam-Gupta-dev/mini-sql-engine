@@ -9,8 +9,8 @@
  the pandas library.
 
  Usage:
-   python show_output.py
-   python show_output.py <filename.csv>
+    python app/show_output.py
+    python app/show_output.py <filename.csv>
 
  If no filename is given, it lists all available CSV files
  in data/ and lets you pick one.
@@ -38,7 +38,8 @@ except ImportError:
 
 def get_csv_files():
     """Find all CSV output files in the data/ folder."""
-    data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+    project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    data_dir = os.path.join(project_dir, "data")
     if not os.path.exists(data_dir):
         print("[Error] 'data/' folder nahi mila!")
         return []
@@ -98,8 +99,9 @@ def main():
         filepath = sys.argv[1]
         # If just a filename (no path), look in data/
         if os.path.sep not in filepath and "/" not in filepath:
+            project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             filepath = os.path.join(
-                os.path.dirname(os.path.abspath(__file__)), "data", filepath
+                project_dir, "data", filepath
             )
         print_table(filepath)
         return
@@ -122,8 +124,9 @@ def main():
             return
         idx = int(choice) - 1
         if 0 <= idx < len(csv_files):
+            project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             data_dir = os.path.join(
-                os.path.dirname(os.path.abspath(__file__)), "data"
+                project_dir, "data"
             )
             filepath = os.path.join(data_dir, csv_files[idx])
             print_table(filepath)
